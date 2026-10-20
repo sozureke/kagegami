@@ -1,9 +1,9 @@
 package main
 
 import (
-	"fmt"
-	"io"
 	"os"
+
+	"github.com/sozureke/kagegami/internal/cli"
 )
 
 // Set at build time via -ldflags "-X main.version=... -X main.commit=... -X main.date=...".
@@ -14,16 +14,6 @@ var (
 )
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
-}
-
-// run executes the CLI and returns the process exit code.
-func run(args []string, stdout, stderr io.Writer) int {
-	if len(args) > 0 && args[0] == "version" {
-		_, _ = fmt.Fprintf(stdout, "kagegami %s (commit %s, built %s)\n", version, commit, date)
-		return 0
-	}
-
-	_, _ = fmt.Fprintln(stderr, "Kagegami — pentest assistant. Not yet implemented.")
-	return 1
+	info := cli.BuildInfo{Version: version, Commit: commit, Date: date}
+	os.Exit(cli.Run(os.Args[1:], os.Stdout, os.Stderr, info))
 }
