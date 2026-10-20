@@ -1,0 +1,79 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - depguard
+    - errcheck
+    - errorlint
+    - govet
+    - gosec
+    - ineffassign
+    - misspell
+    - noctx
+    - revive
+    - staticcheck
+    - unused
+  settings:
+    depguard:
+      rules:
+        pkg-is-standalone:
+          files:
+            - "**/pkg/**"
+          deny:
+            - pkg: github.com/sozureke/kagegami/internal
+              desc: pkg/* must not import internal/*
+        core-is-below-ui:
+          files:
+            - "**/internal/store/**"
+            - "**/internal/recon/**"
+            - "**/internal/pipeline/**"
+            - "**/internal/mask/**"
+          deny:
+            - pkg: github.com/sozureke/kagegami/cmd
+              desc: core packages must not import cmd
+            - pkg: github.com/sozureke/kagegami/internal/agent
+              desc: core packages must not import agent
+            - pkg: github.com/sozureke/kagegami/internal/tui
+              desc: core packages must not import tui
+            - pkg: github.com/sozureke/kagegami/internal/report
+              desc: core packages must not import report
+        orchestration-is-below-cmd:
+          files:
+            - "**/internal/agent/**"
+            - "**/internal/tui/**"
+            - "**/internal/report/**"
+          deny:
+            - pkg: github.com/sozureke/kagegami/cmd
+              desc: internal packages must not import cmd
+        agent-and-report-do-not-know-tui:
+          files:
+            - "**/internal/agent/**"
+            - "**/internal/report/**"
+          deny:
+            - pkg: github.com/sozureke/kagegami/internal/tui
+              desc: agent and report must not import tui
+    gosec:
+      excludes: []
+  exclusions:
+    presets:
+      - comments
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters:
+          - gosec
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/sozureke/kagegami

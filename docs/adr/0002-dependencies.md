@@ -10,7 +10,7 @@ The initial stack was chosen from memory, without checking current versions. Ver
 
 ### Go version: 1.27
 
-`go.mod` declares `go 1.27.0`, the latest stable release (1.27.3 at the time of writing). See the freshness policy below. CI reads the version from `go.mod`; contributors with an older local Go get the right toolchain through `GOTOOLCHAIN=auto`.
+`go.mod` declares `go 1.27.3`, the latest stable patch release at the time of writing. Pinning the patch matters: the standard library of go1.27.0 had known vulnerabilities (reported by `govulncheck`) fixed in later patches. See the freshness policy below. CI reads the version from `go.mod`; contributors with an older local Go get the right toolchain through `GOTOOLCHAIN=auto`.
 
 ### Dependencies
 
