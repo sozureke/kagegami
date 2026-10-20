@@ -7,9 +7,11 @@ on:
   schedule:
     - cron: "23 4 * * 1"
 
+# Cancel superseded runs on pull requests only. Every push to main keeps its own run,
+# otherwise merging several PRs in a row leaves earlier commits with cancelled checks.
 concurrency:
-  group: codeql-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: codeql-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
