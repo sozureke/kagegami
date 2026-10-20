@@ -1,0 +1,58 @@
+name: Bug report
+description: Something does not work as expected
+labels: ["type/bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Kagegami is pre-alpha, so some breakage is expected.
+
+        **Do not paste real credentials, hostnames or target data.** Mask anything sensitive before submitting.
+        For security vulnerabilities, use a private security advisory instead of this form.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Kagegami version
+      description: Output of `kagegami version`, or the commit hash if built from source.
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS and architecture
+      placeholder: e.g. Kali 2026.3 arm64, macOS 26 arm64
+    validations:
+      required: true
+  - type: input
+    id: shell-tmux
+    attributes:
+      label: Shell and tmux version
+      placeholder: e.g. zsh 5.9, tmux 3.5
+  - type: input
+    id: model
+    attributes:
+      label: Model provider and model
+      description: Only if the problem involves the model layer.
+      placeholder: e.g. ollama / llama3.1:8b
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or output
+      description: Relevant log lines or command output, with secrets and target details removed.
+      render: shell
