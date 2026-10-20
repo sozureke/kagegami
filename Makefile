@@ -24,7 +24,7 @@ LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.dat
 
 ## Show available targets
 help: 
-	@awk 'BEGIN {FS = ":.*## "} /^[a-z-]+:.*## / {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk '/^## /{d=substr($$0,4);next} /^[a-z-]+:/{n=$$1;sub(/:$$/,"",n);if(d!=""){printf "  %-12s %s\n",n,d;d=""}}' $(MAKEFILE_LIST)
 
 ## Build a static binary into ./kagegami
 build: 
@@ -51,9 +51,9 @@ tidy-check:
 	go mod tidy
 	git diff --exit-code -- go.mod go.sum
 
-## Build a local release snapshot with GoReleaser
+## Build a local release snapshot (signing and SBOM are skipped; CI does them)
 snapshot: 
-	$(GORELEASER) release --snapshot --clean
+	$(GORELEASER) release --snapshot --clean --skip=sign,sbom
 	
 ## Run the watcher from source
 dev: 
