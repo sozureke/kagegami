@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	_ "modernc.org/sqlite" // registers the "sqlite" driver
 )
@@ -23,7 +24,8 @@ const FileName = "kagegami.db"
 var ErrSchemaTooNew = errors.New("database schema is newer than this version of kagegami")
 
 type Store struct {
-	db *sql.DB
+	db  *sql.DB
+	now func() time.Time
 }
 
 func Open(ctx context.Context, path string) (*Store, error) {
@@ -44,7 +46,7 @@ func open(ctx context.Context, path string, migrations fs.FS) (*Store, error) {
 		return nil, fmt.Errorf("create database: %w", err)
 	}
 
-	dsn := "file:" + path + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
+	dsn := "file:" + path + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_txlock=immediate"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
@@ -53,7 +55,7 @@ func open(ctx context.Context, path string, migrations fs.FS) (*Store, error) {
 	// while a transaction is open on another handle, it would wait for the connection.
 	db.SetMaxOpenConns(1)
 
-	s := &Store{db: db}
+	s := &Store{db: db, now: time.Now}
 	if err := s.migrate(ctx, path, migrations); err != nil {
 		_ = db.Close()
 		return nil, err
