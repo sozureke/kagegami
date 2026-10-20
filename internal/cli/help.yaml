@@ -1,0 +1,19 @@
+root:
+  short: Pentest recon assistant for your terminal
+  long: |-
+    Kagegami watches the output of the commands you run, keeps a map of the
+    target and an engagement journal, and suggests the next step.
+
+commands:
+  init:
+    short: Create the configuration (and optionally a case)
+  watch:
+    short: Open the side panel next to your terminal (tmux)
+  next:
+    short: Suggest the next recon step
+  report:
+    short: Generate the Markdown report
+  map:
+    short: Show the target map
+  version:
+    short: Print version information
