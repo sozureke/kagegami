@@ -3,6 +3,7 @@
 package setup
 
 import (
+	"context"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 
 	"github.com/sozureke/kagegami/internal/config"
+	"github.com/sozureke/kagegami/internal/store"
 )
 
 //go:embed assets/config.yaml
@@ -135,6 +137,17 @@ func createCase(p config.Paths, name string) (Item, error) {
 	if err := os.MkdirAll(raw, dirMode); err != nil {
 		return Item{}, fmt.Errorf("create case %q: %w", name, err)
 	}
+
+	// Opening creates the database and brings its schema up to date; for an existing
+	// case that is a no-op when the schema is already current.
+	st, err := store.Open(context.Background(), filepath.Join(dir, store.FileName))
+	if err != nil {
+		return Item{}, fmt.Errorf("create case %q: %w", name, err)
+	}
+	if err := st.Close(); err != nil {
+		return Item{}, fmt.Errorf("create case %q: %w", name, err)
+	}
+
 	if existed {
 		return Item{Path: dir, Action: Skipped}, nil
 	}
