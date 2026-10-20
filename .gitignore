@@ -24,3 +24,6 @@ coverage.html
 .idea/
 .vscode/
 *.swp
+
+# Tooling output
+/bin/
