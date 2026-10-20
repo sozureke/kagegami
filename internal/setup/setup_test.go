@@ -1,6 +1,8 @@
 package setup
 
 import (
+	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
@@ -8,10 +10,16 @@ import (
 	"strings"
 	"testing"
 
+	_ "modernc.org/sqlite" // the driver the test opens the database with
+
 	"github.com/sozureke/kagegami/internal/config"
+	"github.com/sozureke/kagegami/internal/store"
 )
 
 // testPaths puts everything under a fresh temporary KAGEGAMI_HOME.
+// bg is the context used by test helpers that talk to the database.
+var bg = context.Background()
+
 func testPaths(t *testing.T) config.Paths {
 	t.Helper()
 	root := filepath.Join(t.TempDir(), "kg")
@@ -321,5 +329,63 @@ func TestEmbeddedConfigMatchesDefault(t *testing.T) {
 func TestEmbeddedTemplateIsNotEmpty(t *testing.T) {
 	if strings.TrimSpace(string(defaultTemplate)) == "" {
 		t.Fatal("embedded pentest.md is empty")
+	}
+}
+
+func TestInitCaseCreatesTheDatabase(t *testing.T) {
+	p := testPaths(t)
+	if _, err := Init(p, Options{Case: "box1"}); err != nil {
+		t.Fatal(err)
+	}
+
+	caseDir, _ := p.CaseDir("box1")
+	dbPath := filepath.Join(caseDir, store.FileName)
+	st, err := os.Stat(dbPath)
+	if err != nil {
+		t.Fatalf("database missing: %v", err)
+	}
+	if got := st.Mode().Perm(); got != 0o600 {
+		t.Errorf("database mode = %o, want 600", got)
+	}
+
+	// The database has its schema: it can be opened and used right away.
+	s, err := store.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("store.Open on the created database: %v", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInitCaseKeepsExistingData(t *testing.T) {
+	p := testPaths(t)
+	if _, err := Init(p, Options{Case: "box1"}); err != nil {
+		t.Fatal(err)
+	}
+	caseDir, _ := p.CaseDir("box1")
+	dbPath := filepath.Join(caseDir, store.FileName)
+
+	db, err := sql.Open("sqlite", "file:"+dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(bg, "INSERT INTO engagement (name, created_at) VALUES ('keep', 1)"); err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+
+	if _, err := Init(p, Options{Case: "box1", Force: true}); err != nil {
+		t.Fatalf("second Init: %v", err)
+	}
+
+	db, err = sql.Open("sqlite", "file:"+dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	var name string
+	if err := db.QueryRowContext(bg, "SELECT name FROM engagement").Scan(&name); err != nil || name != "keep" {
+		t.Errorf("engagement after re-running init --case --force = %q, %v; want the original row", name, err)
 	}
 }
