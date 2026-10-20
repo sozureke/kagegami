@@ -1,0 +1,36 @@
+# Kagegami configuration. Every key is optional: anything you leave out keeps
+# the default shown here. Unknown keys are an error, so typos are caught early.
+
+model:
+  tier1: ollama/llama3.1:8b # cheap state extractor, runs on every interesting command
+  tier2: ollama/qwen2.5:14b # reasoning model for `next` and `pipeline`
+  cloud_fallback: false
+
+privacy:
+  mask_credentials: true # credentials and hashes become ••• before anything leaves your machine
+  mask_flags: true
+  mask_hosts: false
+
+execution:
+  mode: propose # propose | approve-run
+  confirm_destructive: true
+
+engagement:
+  scaffold_folders: true
+  auto_report: true
+  report_template: "" # empty means <config dir>/templates/pentest.md
+  author: "" # name for "Prepared by" in the report
+
+# Per-phase hints for the model, for example:
+# phases:
+#   recon:
+#     emphasis: "full information gathering, synthesis into a pipeline"
+#   web:
+#     emphasis: "curl/ffuf/httpx, no browser"
+
+capture:
+  trigger: shell-hooks # shell-hooks | pipe-pane
+  ignore: [cd, ls, clear, pwd] # commands that never trigger reasoning
+
+logging:
+  level: info # debug | info | warn | error
