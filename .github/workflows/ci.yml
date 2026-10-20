@@ -5,9 +5,11 @@ on:
     branches: [main]
   pull_request:
 
+# Cancel superseded runs on pull requests only. Every push to main keeps its own run,
+# otherwise merging several PRs in a row leaves earlier commits with cancelled checks.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
