@@ -1,0 +1,8 @@
+# Default owner for everything. More specific rules can be added below
+# (later matches take precedence).
+* @sozureke
+
+# Release and supply-chain configuration
+/.github/ @sozureke
+/.goreleaser.yaml @sozureke
+/Makefile @sozureke
