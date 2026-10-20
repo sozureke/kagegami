@@ -1,0 +1,8 @@
+* text=auto eol=lf
+*.go text eol=lf
+*.sh text eol=lf
+*.zsh text eol=lf
+*.bash text eol=lf
+
+# Golden files and recorded tool output must stay byte-exact.
+testdata/** -text
