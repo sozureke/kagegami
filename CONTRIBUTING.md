@@ -31,3 +31,7 @@ A `Makefile` with `build`, `test`, `lint` and `fmt` targets arrives with M1.
 ## License
 
 By contributing you agree that your contributions are licensed under the [MIT License](LICENSE).
+
+## Releases
+
+Releases are cut by the maintainer by pushing a `v*` tag; see [ADR-0003](docs/adr/0003-release-process.md) for the process and how to verify release artifacts.
