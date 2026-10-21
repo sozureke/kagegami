@@ -32,7 +32,7 @@ The lifecycle follows from the file. Starting `watch` creates it, ending `watch`
 
 ### Marker text
 
-The command text in a start marker has every control character replaced by a space (a newline, ESC or BEL in it would end the marker early or start another sequence). The text is the last field of the marker and may contain `;` and `=`, so a parser splits the first fields and takes the rest as the command.
+The command text in a start marker has every control character replaced by a space (a newline, ESC or BEL in it would end the marker early or start another sequence). The text is cut to 4096 characters, so a marker stays far below the 20 KiB the parser is willing to hold while it waits for the end of one. The text is the last field of the marker and may contain `;` and `=`, so a parser splits the first fields and takes the rest as the command.
 
 ### `PROMPT_SP` follows the watch
 

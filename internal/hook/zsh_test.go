@@ -505,3 +505,16 @@ func TestZshHookStartsTheCommandAfterOtherPreexecHooksRan(t *testing.T) {
 		t.Errorf("output of the command = %q, want exactly %q", firstAfter(ev), "x\r\n")
 	}
 }
+
+// A pasted script can be very long; the marker must stay short enough for the parser.
+func TestZshHookCutsAVeryLongCommandText(t *testing.T) {
+	s := newSession(t)
+	s.load()
+	s.watch(testNonce)
+	s.run(": " + strings.Repeat("x", 9000))
+
+	ev := parse(s.stream())
+	if len(ev) != 2 || len(ev[0].fields["cmd"]) != 4096 || ev[1].kind != "D" {
+		t.Errorf("markers = %d, command text of %d characters; want 2 markers and 4096 characters", len(ev), len(ev[0].fields["cmd"]))
+	}
+}
