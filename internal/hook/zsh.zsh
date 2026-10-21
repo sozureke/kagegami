@@ -38,7 +38,7 @@ if [[ -n $TMUX_PANE && -z $__kg_loaded ]]; then
     fi
     (( __kg_id++ ))
     __kg_open=1
-    local c=${1//[[:cntrl:]]/ }
+    local c=${${1//[[:cntrl:]]/ }[1,4096]}
     print -rn -- $'\e]7771;C;kg='$n';id='$__kg_id';cmd='$c$'\a'
   }
 
