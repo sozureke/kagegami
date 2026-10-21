@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -33,6 +34,7 @@ type fakePipe struct {
 	noncePresentAtPipe bool
 	fifoPresentAtPipe  bool
 	nonceAtStop        bool
+	readerAtStop       bool
 }
 
 func newFakePipe(t *testing.T, runDir string) *fakePipe {
@@ -85,6 +87,13 @@ func (f *fakePipe) PipePane(_ context.Context, _ tmux.PaneID, command string) er
 
 func (f *fakePipe) StopPipe(context.Context, tmux.PaneID) error {
 	f.record("stop")
+	// A named pipe nobody reads blocks whoever opens it for writing, so while the pipe
+	// exists something must still be reading it. (Opening without waiting for a reader
+	// fails with ENXIO when there is none.)
+	if w, err := os.OpenFile(filepath.Join(f.runDir, "7.fifo"), os.O_WRONLY|syscall.O_NONBLOCK, 0); err == nil {
+		_ = w.Close()
+		f.readerAtStop = true
+	}
 	_, err := os.Lstat(filepath.Join(f.runDir, "7.nonce"))
 	f.nonceAtStop = err == nil
 	f.mu.Lock()
@@ -257,6 +266,9 @@ func TestWatchLeavesNothingBehindWhenClosed(t *testing.T) {
 	}
 	if pipe.nonceAtStop {
 		t.Error("the nonce file must be gone before the pipe is stopped, so the hook stops marking first")
+	}
+	if !pipe.readerAtStop {
+		t.Error("nobody was reading the named pipe when the pipe was stopped: a command that starts late would block for ever opening it")
 	}
 
 	var last Event
