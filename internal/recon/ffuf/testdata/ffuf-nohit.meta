@@ -1,0 +1,6 @@
+command: ffuf -u http://127.0.0.1:8000/FUZZ -w /tmp/kg-dev/none.txt
+exit: 0
+date: 2026-10-21T22:02:31Z
+term:  0 0
+tool: flag provided but not defined: -version
+bytes: 913

@@ -1,0 +1,6 @@
+command: whatweb http://127.0.0.1:8000/admin
+exit: 0
+date: 2026-10-21T22:02:44Z
+term:  0 0
+tool: WhatWeb version 0.6.4 ( https://morningstarsecurity.com/research/whatweb/ )
+bytes: 550

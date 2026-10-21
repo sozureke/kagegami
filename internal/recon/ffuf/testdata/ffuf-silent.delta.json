@@ -1,0 +1,10 @@
+{
+  "web_paths": [
+    {
+      "host_ip": "127.0.0.1",
+      "port": 8000,
+      "proto": "tcp",
+      "path": "/admin"
+    }
+  ]
+}

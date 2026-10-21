@@ -1,0 +1,31 @@
+
+        /'___\  /'___\           /'___\       
+       /\ \__/ /\ \__/  __  __  /\ \__/       
+       \ \ ,__\\ \ ,__\/\ \/\ \ \ \ ,__\      
+        \ \ \_/ \ \ \_/\ \ \_\ \ \ \ \_/      
+         \ \_\   \ \_\  \ \____/  \ \_\       
+          \/_/    \/_/   \/___/    \/_/       
+
+       2.1.0-dev
+________________________________________________
+
+ :: Method           : GET
+ :: URL              : http://127.0.0.1:8000/FUZZ
+ :: Wordlist         : FUZZ: /usr/share/wordlists/dirb/common.txt
+ :: Extensions       : .html .txt 
+ :: Follow redirects : false
+ :: Calibration      : false
+ :: Timeout          : 10
+ :: Threads          : 40
+ :: Matcher          : Response status: 200,301
+________________________________________________
+
+[2K:: Progress: [1/13842] :: Job [1/1] :: 0 req/sec :: Duration: [0:00:00] :: Errors: 0 ::[2K:: Progress: [427/13842] :: Job [1/1] :: 0 req/sec :: Duration: [0:00:00] :: Errors: 0 ::[2Kadmin                   [Status: 301, Size: 0, Words: 1, Lines: 1, Duration: 1ms][0m
+[2K:: Progress: [862/13842] :: Job [1/1] :: 0 req/sec :: Duration: [0:00:00] :: Errors: 0 ::[2K:: Progress: [878/13842] :: Job [1/1] :: 0 req/sec :: Duration: [0:00:00] :: Errors: 0 ::[2K:: Progress: [1330/13842] :: Job [1/1] :: 0 req/sec :: Duration: [0:00:00] :: Errors: 0 ::[2K:: Progress: [1777/13842] :: Job [1/1] :: 0 req/sec :: Duration: [0:00:00] :: Errors: 0 ::[2K:: Progress: [2233/13842] :: Job [1/1] :: 0 req/sec :: Duration: [0:00:00] :: Errors: 0 ::[2K:: Progress: [2686/13842] :: Job [1/1] :: 0 req/sec :: Duration: [0:00:00] :: Errors: 0 ::[2K:: Progress: [3146/13842] :: Job [1/1] :: 0 req/sec :: Duration: [0:00:00] :: Errors: 0 ::[2K:: Progress: [3600/13842] :: Job [1/1] :: 3703 req/sec :: Duration: [0:00:01] :: Errors: 0 ::[2K                        [Status: 200, Size: 46, Words: 1, Lines: 1, Duration: 1ms][0m
+[2K:: Progress: [3654/13842] :: Job [1/1] :: 3703 req/sec :: Duration: [0:00:01] :: Errors: 0 ::[2K:: Progress: [4056/13842] :: Job [1/1] :: 3703 req/sec :: Duration: [0:00:01] :: Errors: 0 ::[2K:: Progress: [4515/13842] :: Job [1/1] :: 3773 req/sec :: Duration: [0:00:01] :: Errors: 0 ::[2K:: Progress: [4958/13842] :: Job [1/1] :: 3508 req/sec :: Duration: [0:00:01] :: Errors: 0 ::[2K:: Progress: [5405/13842] :: Job [1/1] :: 3636 req/sec :: Duration: [0:00:01] :: Errors: 0 ::[2K:: Progress: [5857/13842] :: Job [1/1] :: 3571 req/sec :: Duration: [0:00:01] :: Errors: 0 ::[2Kimg                     [Status: 301, Size: 0, Words: 1, Lines: 1, Duration: 1ms][0m
+[2K:: Progress: [5997/13842] :: Job [1/1] :: 3571 req/sec :: Duration: [0:00:01] :: Errors: 0 ::[2Kindex.html              [Status: 200, Size: 46, Words: 1, Lines: 1, Duration: 1ms][0m
+[2K:: Progress: [6053/13842] :: Job [1/1] :: 3448 req/sec :: Duration: [0:00:01] :: Errors: 0 ::[2Kindex.html              [Status: 200, Size: 46, Words: 1, Lines: 1, Duration: 1ms][0m
+[2K:: Progress: [6063/13842] :: Job [1/1] :: 3571 req/sec :: Duration: [0:00:01] :: Errors: 0 ::[2K:: Progress: [6304/13842] :: Job [1/1] :: 3773 req/sec :: Duration: [0:00:01] :: Errors: 0 ::[2K:: Progress: [6743/13842] :: Job [1/1] :: 3333 req/sec :: Duration: [0:00:01] :: Errors: 0 ::[2Klogin.html              [Status: 200, Size: 2, Words: 1, Lines: 2, Duration: 1ms][0m
+[2K:: Progress: [7045/13842] :: Job [1/1] :: 3508 req/sec :: Duration: [0:00:01] :: Errors: 0 ::[2K:: Progress: [7183/13842] :: Job [1/1] :: 3448 req/sec :: Duration: [0:00:02] :: Errors: 0 ::[2K:: Progress: [7619/13842] :: Job [1/1] :: 3571 req/sec :: Duration: [0:00:02] :: Errors: 0 ::[2K:: Progress: [8055/13842] :: Job [1/1] :: 3636 req/sec :: Duration: [0:00:02] :: Errors: 0 ::[2K:: Progress: [8507/13842] :: Job [1/1] :: 3846 req/sec :: Duration: [0:00:02] :: Errors: 0 ::[2K:: Progress: [8964/13842] :: Job [1/1] :: 3846 req/sec :: Duration: [0:00:02] :: Errors: 0 ::[2K:: Progress: [9406/13842] :: Job [1/1] :: 3448 req/sec :: Duration: [0:00:02] :: Errors: 0 ::[2K:: Progress: [9839/13842] :: Job [1/1] :: 3508 req/sec :: Duration: [0:00:02] :: Errors: 0 ::[2K:: Progress: [10285/13842] :: Job [1/1] :: 3636 req/sec :: Duration: [0:00:02] :: Errors: 0 ::[2Krobots.txt              [Status: 200, Size: 2, Words: 1, Lines: 2, Duration: 1ms][0m
+[2K:: Progress: [10310/13842] :: Job [1/1] :: 3703 req/sec :: Duration: [0:00:02] :: Errors: 0 ::[2Krobots.txt              [Status: 200, Size: 2, Words: 1, Lines: 2, Duration: 1ms][0m
+[2K:: Progress: [10311/13842] :: Job [1/1] :: 3703 req/sec :: Duration: [0:00:02] :: Errors: 0 ::[2K:: Progress: [10731/13842] :: Job [1/1] :: 3571 req/sec :: Duration: [0:00:03] :: Errors: 0 ::[2K:: Progress: [11174/13842] :: Job [1/1] :: 3508 req/sec :: Duration: [0:00:03] :: Errors: 0 ::[2K:: Progress: [11629/13842] :: Job [1/1] :: 3636 req/sec :: Duration: [0:00:03] :: Errors: 0 ::[2K:: Progress: [12071/13842] :: Job [1/1] :: 3571 req/sec :: Duration: [0:00:03] :: Errors: 0 ::[2K:: Progress: [12510/13842] :: Job [1/1] :: 3389 req/sec :: Duration: [0:00:03] :: Errors: 0 ::[2K:: Progress: [12941/13842] :: Job [1/1] :: 3448 req/sec :: Duration: [0:00:03] :: Errors: 0 ::[2K:: Progress: [13392/13842] :: Job [1/1] :: 3636 req/sec :: Duration: [0:00:03] :: Errors: 0 ::[2K:: Progress: [13839/13842] :: Job [1/1] :: 3571 req/sec :: Duration: [0:00:03] :: Errors: 0 ::[2K:: Progress: [13842/13842] :: Job [1/1] :: 2469 req/sec :: Duration: [0:00:04] :: Errors: 0 ::[2K:: Progress: [13842/13842] :: Job [1/1] :: 51 req/sec :: Duration: [0:00:07] :: Errors: 0 ::

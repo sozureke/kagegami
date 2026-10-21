@@ -1,0 +1,7 @@
+{
+  "notes": [
+    {
+      "text": "ffuf (not a path scan) on 127.0.0.1:8000 answered for: admin (200), nothing2 (200), nothing1 (200)"
+    }
+  ]
+}

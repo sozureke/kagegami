@@ -1,0 +1,16 @@
+===============================================================
+Gobuster v3.8.2
+by OJ Reeves (@TheColonial) & Christian Mehlmauer (@firefart)
+===============================================================
+[+] Url:                     http://127.0.0.1:9
+[+] Method:                  GET
+[+] Threads:                 10
+[+] Wordlist:                /tmp/kg-dev/none.txt
+[+] Negative Status codes:   404
+[+] User Agent:              gobuster/3.8.2
+[+] Timeout:                 10s
+===============================================================
+Starting gobuster in directory enumeration mode
+===============================================================
+[2KProgress: 0 / 1 (0.00%)
+2026/10/22 00:02:39 error on running gobuster on http://127.0.0.1:9/: connection refused

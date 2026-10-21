@@ -1,0 +1,6 @@
+command: gobuster dir -u http://127.0.0.1:8000 -w /usr/share/wordlists/dirb/common.txt
+exit: 0
+date: 2026-10-21T21:05:34Z
+term:  0 0
+tool: gobuster version 3.8.2
+bytes: 1291

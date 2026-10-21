@@ -299,3 +299,58 @@ func TestApplyNormalizesBeforeStoring(t *testing.T) {
 		t.Errorf("hosts %+v, added %+v: one host, written in its canonical form", s.hosts, added)
 	}
 }
+
+func TestApplyDoesNotDowngradeAServiceName(t *testing.T) {
+	st, _ := openStore(t)
+	versioned := recon.StateDelta{Services: []recon.ServiceDelta{{HostIP: "10.0.0.1", Port: 8000, Proto: "tcp", State: "open", Name: "http", Version: "SimpleHTTPServer 0.6"}}}
+	guessed := recon.StateDelta{Services: []recon.ServiceDelta{{HostIP: "10.0.0.1", Port: 8000, Proto: "tcp", State: "open", Name: "http-alt"}}}
+	for _, d := range []recon.StateDelta{versioned, guessed} {
+		if _, err := Apply(bg, st, d, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := take(t, st)
+	svc := s.services[s.hosts[0].ID][0]
+	if svc.Name != "http" || svc.Version != "SimpleHTTPServer 0.6" {
+		t.Errorf("service = %+v: a scan without a version must not replace what a version scan found", svc)
+	}
+	// but a scan that brings a version of its own does replace the name
+	newer := recon.StateDelta{Services: []recon.ServiceDelta{{HostIP: "10.0.0.1", Port: 8000, Proto: "tcp", Name: "https", Version: "nginx"}}}
+	if _, err := Apply(bg, st, newer, nil); err != nil {
+		t.Fatal(err)
+	}
+	if svc := take(t, st).services[s.hosts[0].ID][0]; svc.Name != "https" || svc.Version != "nginx" {
+		t.Errorf("service = %+v", svc)
+	}
+	// and a name is taken when nothing was known
+	fresh := recon.StateDelta{Services: []recon.ServiceDelta{{HostIP: "10.0.0.2", Port: 22, Proto: "tcp", Name: "ssh"}}}
+	if _, err := Apply(bg, st, fresh, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestApplyPlacesPathsFoundOnAHostKnownByName(t *testing.T) {
+	st, _ := openStore(t)
+	if _, err := Apply(bg, st, recon.StateDelta{Hosts: []recon.HostDelta{{IP: "10.10.10.5", Hostname: "box.htb"}}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	d := recon.StateDelta{WebPaths: []recon.WebPathDelta{
+		{Host: "Box.HTB", Port: 80, Proto: "tcp", Path: "/admin", StatusCode: ptr(301)},
+		{Host: "other.htb", Port: 8080, Proto: "tcp", Path: "/a", StatusCode: ptr(200)},
+		{Host: "other.htb", Port: 8080, Proto: "tcp", Path: "/b"},
+	}}
+	added, err := Apply(bg, st, d, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if added.WebPaths != 1 || added.Services != 1 || added.Hosts != 0 || added.Notes != 1 {
+		t.Errorf("added = %+v", added)
+	}
+	s := take(t, st)
+	if len(s.hosts) != 1 || s.paths[s.services[s.hosts[0].ID][0].ID][0].Path != "/admin" {
+		t.Errorf("the path was not placed on the known host: %+v", s.paths)
+	}
+	if len(s.journal) != 1 || s.journal[0].Text != "paths found on other.htb:8080/tcp (address not known): /a (200), /b" {
+		t.Errorf("journal = %+v", s.journal)
+	}
+}

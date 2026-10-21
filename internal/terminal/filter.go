@@ -298,6 +298,16 @@ func CommandNames(line string) []string {
 
 // programName finds the program in the words of one simple command.
 func programName(words []string) string {
+	rest := programWords(words)
+	if len(rest) == 0 {
+		return ""
+	}
+	return path.Base(strings.TrimPrefix(rest[0], `\`))
+}
+
+// programWords returns the words of one simple command from the program on, after variable
+// assignments and wrappers (with their options).
+func programWords(words []string) []string {
 	for len(words) > 0 {
 		w := words[0]
 		if isAssignment(w) {
@@ -317,10 +327,26 @@ func programName(words []string) string {
 			}
 		}
 	}
-	if len(words) == 0 {
-		return ""
+	return words
+}
+
+// CommandArgs returns the arguments of the first command on the line that runs program, or
+// nil if none does. It reads the line as CommandNames does.
+func CommandArgs(line, program string) []string {
+	segments, ok := splitSegments(line)
+	if !ok {
+		segments = strings.FieldsFunc(line, func(r rune) bool { return strings.ContainsRune(";|&\n(){}`", r) })
 	}
-	return path.Base(strings.TrimPrefix(words[0], `\`))
+	for _, seg := range segments {
+		words, ok := splitWords(seg)
+		if !ok {
+			words = strings.Fields(seg)
+		}
+		if rest := programWords(words); len(rest) > 0 && path.Base(strings.TrimPrefix(rest[0], `\`)) == program {
+			return rest[1:]
+		}
+	}
+	return nil
 }
 
 func slicesContains(list []string, s string) bool {

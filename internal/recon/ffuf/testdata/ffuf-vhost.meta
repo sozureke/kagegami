@@ -1,0 +1,6 @@
+command: ffuf -u http://127.0.0.1:8000/ -H Host: FUZZ.lab.htb -w /tmp/kg-dev/small.txt -fs 0
+exit: 0
+date: 2026-10-21T22:02:31Z
+term:  0 0
+tool: flag provided but not defined: -version
+bytes: 1537

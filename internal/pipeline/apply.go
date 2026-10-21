@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/sozureke/kagegami/internal/recon"
 	"github.com/sozureke/kagegami/internal/store"
@@ -80,6 +82,11 @@ func (a *applier) run(d recon.StateDelta, added *Added) error {
 		if s.State == "" && found {
 			s.State = existing.State // no news about the state: keep what is known
 		}
+		if found && s.Version == "" && existing.Version != "" {
+			// A scan without version detection names a service after its port (http-alt for
+			// 8000); that must not replace what a version scan found out.
+			s.Name = existing.Name
+		}
 		if _, err := a.repo.UpsertService(a.ctx, store.Service{
 			HostID: host.ID, Port: s.Port, Proto: s.Proto, Name: s.Name, Version: s.Version, State: s.State, SourceBlobID: a.source,
 		}); err != nil {
@@ -89,7 +96,19 @@ func (a *applier) run(d recon.StateDelta, added *Added) error {
 			added.Services++
 		}
 	}
+	var unresolved []recon.WebPathDelta
 	for _, w := range d.WebPaths {
+		if w.HostIP == "" {
+			ip, ok, err := a.hostByName(w.Host)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				unresolved = append(unresolved, w)
+				continue
+			}
+			w.HostIP = ip
+		}
 		host, newHost, err := a.host(w.HostIP)
 		if err != nil {
 			return err
@@ -122,7 +141,53 @@ func (a *applier) run(d recon.StateDelta, added *Added) error {
 	if err := a.findings(d.Findings, added); err != nil {
 		return err
 	}
-	return a.notes(d.Notes, added)
+	return a.notes(append(slices.Clone(d.Notes), unresolvedNotes(unresolved)...), added)
+}
+
+// hostByName finds the address of the host the map knows by this name.
+func (a *applier) hostByName(name string) (string, bool, error) {
+	hosts, err := a.repo.ListHosts(a.ctx)
+	if err != nil {
+		return "", false, err
+	}
+	for _, h := range hosts {
+		if strings.EqualFold(h.Hostname, name) {
+			return h.IP, true, nil
+		}
+	}
+	return "", false, nil
+}
+
+// unresolvedNotes turns paths found on a host that the map does not know by name into notes,
+// one per service: they cannot be placed on the map, but they must not be lost.
+func unresolvedNotes(paths []recon.WebPathDelta) []recon.NoteDelta {
+	type key struct {
+		host  string
+		port  int
+		proto string
+	}
+	var order []key
+	byService := map[key][]string{}
+	for _, w := range paths {
+		k := key{w.Host, w.Port, w.Proto}
+		if _, ok := byService[k]; !ok {
+			order = append(order, k)
+		}
+		entry := w.Path
+		if w.StatusCode != nil {
+			entry += fmt.Sprintf(" (%d)", *w.StatusCode)
+		}
+		byService[k] = append(byService[k], entry)
+	}
+	var notes []recon.NoteDelta
+	for _, k := range order {
+		text := fmt.Sprintf("paths found on %s:%d/%s (address not known): %s", k.host, k.port, k.proto, strings.Join(byService[k], ", "))
+		if len(text) > 4000 {
+			text = text[:4000] + "..."
+		}
+		notes = append(notes, recon.NoteDelta{Text: text})
+	}
+	return notes
 }
 
 func (a *applier) isNewHost(ip string) (bool, error) {
