@@ -80,6 +80,14 @@ func (w *Watcher) Close() error {
 	return w.Wait()
 }
 
+// pipeCommand is what tmux runs for the pane. The command starts a moment after pipe-pane
+// returns; if the watch has ended by then and the named pipe is gone, a plain redirection
+// would create an ordinary file in its place, so the redirection is only made for a pipe.
+func pipeCommand(fifo string) string {
+	q := tmux.ShellQuote(fifo)
+	return "[ -p " + q + " ] && exec cat > " + q
+}
+
 func fifoName(pane tmux.PaneID) string { return strings.TrimPrefix(string(pane), "%") + ".fifo" }
 
 // Watch starts capturing the commands of pane. The order matters and is part of the contract:
@@ -131,14 +139,17 @@ func Watch(ctx context.Context, cfg WatchConfig) (*Watcher, error) {
 			}
 			cancel()
 		}
-		_ = r.Close()
+		// The pipe file goes before the reader is closed: a command that starts late either
+		// finds the pipe with a reader on it, or finds no pipe at all. A pipe without a
+		// reader would block its writer for ever.
 		if err := os.Remove(fifo); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			errs = append(errs, fmt.Errorf("remove the pipe file: %w", err))
 		}
+		_ = r.Close()
 		return errors.Join(errs...)
 	}
 
-	if err := cfg.Pipe.PipePane(ctx, cfg.Pane, "cat > "+tmux.ShellQuote(fifo)); err != nil {
+	if err := cfg.Pipe.PipePane(ctx, cfg.Pane, pipeCommand(fifo)); err != nil {
 		return nil, errors.Join(fmt.Errorf("start piping the pane: %w", err), cleanup())
 	}
 	piped = true
@@ -160,7 +171,7 @@ func Watch(ctx context.Context, cfg WatchConfig) (*Watcher, error) {
 	go w.watchPane(cfg, poll)
 	go func() {
 		defer close(w.done)
-		runErr := capture(wctx, r, nonce, cfg.Recorder, w.events, silent)
+		runErr := capture(wctx, stopper{r}, nonce, cfg.Recorder, w.events, silent)
 		cancel(errClosed) // whatever ended the capture, the pane watcher can stop
 		cleanErr := cleanup()
 		close(w.events)
@@ -230,17 +241,30 @@ func (r *fifoReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func (r *fifoReader) Close() error {
+// Stop ends the reading: a Read that waits is woken up and reports the end of the stream. The
+// file stays open, because the pipe must have a reader as long as it exists.
+func (r *fifoReader) Stop() {
 	if r.closing.Swap(true) {
-		return nil
+		return
 	}
 	// Without waiting: if the pipe is full, the reader is not waiting for data either.
 	if w, err := os.OpenFile(r.path, os.O_WRONLY|syscall.O_NONBLOCK|syscall.O_NOFOLLOW, 0); err == nil { //nolint:gosec // in the private run directory
 		_, _ = w.Write([]byte{0})
 		_ = w.Close()
 	}
+}
+
+// Close stops the reading and closes the file.
+func (r *fifoReader) Close() error {
+	r.Stop()
 	return r.f.Close()
 }
+
+// stopper is what Capture gets: closing it only stops the reading (see fifoReader.Stop).
+type stopper struct{ r *fifoReader }
+
+func (s stopper) Read(p []byte) (int, error) { return s.r.Read(p) }
+func (s stopper) Close() error               { s.r.Stop(); return nil }
 
 // openFIFO makes a named pipe at path (replacing whatever was left there, never following a
 // link) and opens it for reading and writing, so that opening does not wait for a writer and
