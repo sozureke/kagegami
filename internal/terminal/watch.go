@@ -2,6 +2,8 @@ package terminal
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -80,15 +82,42 @@ func (w *Watcher) Close() error {
 	return w.Wait()
 }
 
-// pipeCommand is what tmux runs for the pane. The command starts a moment after pipe-pane
-// returns; if the watch has ended by then and the named pipe is gone, a plain redirection
-// would create an ordinary file in its place, so the redirection is only made for a pipe.
+// pipeCommand is what tmux runs for the pane. It starts a moment after pipe-pane returns. If
+// the watch has ended by then and the named pipe is gone, a plain redirection would create an
+// ordinary file in its place; so the redirection is only made for a named pipe, and whatever
+// that is not a named pipe afterwards is removed by the command itself, once it is over. The
+// name of the pipe is unique to the watch, so the command can never touch the next one's.
 func pipeCommand(fifo string) string {
 	q := tmux.ShellQuote(fifo)
-	return "[ -p " + q + " ] && exec cat > " + q
+	return "[ -p " + q + " ] && cat > " + q + "; [ -p " + q + " ] || rm -f " + q
 }
 
-func fifoName(pane tmux.PaneID) string { return strings.TrimPrefix(string(pane), "%") + ".fifo" }
+// fifoName makes the name of a watch's named pipe: the pane number and a random part.
+func fifoName(pane tmux.PaneID) (string, error) {
+	raw := make([]byte, 4)
+	if _, err := rand.Read(raw); err != nil {
+		return "", fmt.Errorf("cannot make a name for the pipe file: %w", err)
+	}
+	return strings.TrimPrefix(string(pane), "%") + "." + hex.EncodeToString(raw) + ".fifo", nil
+}
+
+// removeStalePipes removes the named pipes that earlier watches of the pane left behind when
+// they were killed. Links are removed, not followed.
+func removeStalePipes(runDir string, pane tmux.PaneID) error {
+	entries, err := os.ReadDir(runDir)
+	if err != nil {
+		return fmt.Errorf("read the run directory: %w", err)
+	}
+	prefix := strings.TrimPrefix(string(pane), "%") + "."
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), prefix) && strings.HasSuffix(e.Name(), ".fifo") {
+			if err := os.Remove(filepath.Join(runDir, e.Name())); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return fmt.Errorf("remove an old pipe file: %w", err)
+			}
+		}
+	}
+	return nil
+}
 
 // Watch starts capturing the commands of pane. The order matters and is part of the contract:
 // the pipe is open before the nonce file appears, so that the first marked command is not
@@ -120,7 +149,14 @@ func Watch(ctx context.Context, cfg WatchConfig) (*Watcher, error) {
 		return nil, err
 	}
 
-	fifo := filepath.Join(cfg.RunDir, fifoName(cfg.Pane))
+	if err := removeStalePipes(cfg.RunDir, cfg.Pane); err != nil {
+		return nil, err
+	}
+	name, err := fifoName(cfg.Pane)
+	if err != nil {
+		return nil, err
+	}
+	fifo := filepath.Join(cfg.RunDir, name)
 	r, err := openFIFO(fifo)
 	if err != nil {
 		return nil, err

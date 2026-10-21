@@ -64,8 +64,7 @@ func (f *fakePipe) PipePane(_ context.Context, _ tmux.PaneID, command string) er
 		return f.pipeErr
 	}
 	_, nerr := os.Lstat(filepath.Join(f.runDir, "7.nonce"))
-	_, ferr := os.Lstat(filepath.Join(f.runDir, "7.fifo"))
-	f.noncePresentAtPipe, f.fifoPresentAtPipe = nerr == nil, ferr == nil
+	f.noncePresentAtPipe, f.fifoPresentAtPipe = nerr == nil, fifoIn(f.runDir) != ""
 
 	pr, pw, err := os.Pipe()
 	if err != nil {
@@ -90,7 +89,7 @@ func (f *fakePipe) StopPipe(context.Context, tmux.PaneID) error {
 	// A named pipe nobody reads blocks whoever opens it for writing, so while the pipe
 	// exists something must still be reading it. (Opening without waiting for a reader
 	// fails with ENXIO when there is none.)
-	if w, err := os.OpenFile(filepath.Join(f.runDir, "7.fifo"), os.O_WRONLY|syscall.O_NONBLOCK, 0); err == nil {
+	if w, err := os.OpenFile(fifoIn(f.runDir), os.O_WRONLY|syscall.O_NONBLOCK, 0); err == nil {
 		_ = w.Close()
 		f.readerAtStop = true
 	}
@@ -144,6 +143,15 @@ func (f *fakePipe) called(prefix string) int {
 		}
 	}
 	return n
+}
+
+// fifoIn returns the path of the named pipe of the watch in dir ("" if there is none).
+func fifoIn(dir string) string {
+	matches, _ := filepath.Glob(filepath.Join(dir, "7.*.fifo"))
+	if len(matches) == 0 {
+		return ""
+	}
+	return matches[0]
 }
 
 func newRunDir(t *testing.T) string {
@@ -207,7 +215,7 @@ func TestWatchCapturesWhatThePaneOutputs(t *testing.T) {
 	if got := entries(t, run); len(got) != 2 {
 		t.Fatalf("run directory holds %v, want the nonce file and the named pipe", got)
 	}
-	info, _ := os.Lstat(filepath.Join(run, "7.fifo"))
+	info, _ := os.Lstat(fifoIn(run))
 	if info.Mode()&os.ModeNamedPipe == 0 || info.Mode().Perm() != 0o600 {
 		t.Errorf("pipe file mode = %v, want a named pipe with 0600", info.Mode())
 	}
@@ -399,16 +407,19 @@ func TestWatchReplacesWhatAKilledRunLeftBehind(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(run, "7.nonce"), []byte("stale\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(run, "7.fifo"), []byte("junk"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(run, "7.0123abcd.fifo"), []byte("junk"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// another pane's files are not touched
+	if err := os.WriteFile(filepath.Join(run, "8.0123abcd.fifo"), []byte("other"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	target := filepath.Join(t.TempDir(), "precious")
 	if err := os.WriteFile(target, []byte("keep"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// the named pipe's place is taken by a link: it must be replaced, not followed
-	_ = os.Remove(filepath.Join(run, "7.fifo"))
-	if err := os.Symlink(target, filepath.Join(run, "7.fifo")); err != nil {
+	// an old pipe's place is taken by a link: it must be removed, not followed
+	if err := os.Symlink(target, filepath.Join(run, "7.ffffffff.fifo")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -423,6 +434,12 @@ func TestWatchReplacesWhatAKilledRunLeftBehind(t *testing.T) {
 	}
 	if data, _ := os.ReadFile(target); string(data) != "keep" {
 		t.Errorf("the link was followed: %q", data)
+	}
+	if _, err := os.Lstat(filepath.Join(run, "7.0123abcd.fifo")); err == nil {
+		t.Error("an old pipe file of this pane was left")
+	}
+	if data, _ := os.ReadFile(filepath.Join(run, "8.0123abcd.fifo")); string(data) != "other" {
+		t.Error("the file of another pane was touched")
 	}
 	pipe.pane("x")
 }
