@@ -80,6 +80,14 @@ func (w *Watcher) Close() error {
 	return w.Wait()
 }
 
+// pipeCommand is what tmux runs for the pane. The command starts a moment after pipe-pane
+// returns; if the watch has ended by then and the named pipe is gone, a plain redirection
+// would create an ordinary file in its place, so the redirection is only made for a pipe.
+func pipeCommand(fifo string) string {
+	q := tmux.ShellQuote(fifo)
+	return "[ -p " + q + " ] && exec cat > " + q
+}
+
 func fifoName(pane tmux.PaneID) string { return strings.TrimPrefix(string(pane), "%") + ".fifo" }
 
 // Watch starts capturing the commands of pane. The order matters and is part of the contract:
@@ -138,7 +146,7 @@ func Watch(ctx context.Context, cfg WatchConfig) (*Watcher, error) {
 		return errors.Join(errs...)
 	}
 
-	if err := cfg.Pipe.PipePane(ctx, cfg.Pane, "cat > "+tmux.ShellQuote(fifo)); err != nil {
+	if err := cfg.Pipe.PipePane(ctx, cfg.Pane, pipeCommand(fifo)); err != nil {
 		return nil, errors.Join(fmt.Errorf("start piping the pane: %w", err), cleanup())
 	}
 	piped = true

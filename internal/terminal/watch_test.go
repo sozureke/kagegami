@@ -29,7 +29,7 @@ type fakePipe struct {
 	stopErr            error
 	calls              []string
 	stdin              *os.File // the test writes the "pane output" here
-	cmd                *exec.Cmd
+	exited             chan struct{}
 	noncePresentAtPipe bool
 	fifoPresentAtPipe  bool
 	nonceAtStop        bool
@@ -75,8 +75,10 @@ func (f *fakePipe) PipePane(_ context.Context, _ tmux.PaneID, command string) er
 		f.t.Fatal(err)
 	}
 	_ = pr.Close()
+	exited := make(chan struct{})
+	go func() { _ = cmd.Wait(); close(exited) }()
 	f.mu.Lock()
-	f.stdin, f.cmd = pw, cmd
+	f.stdin, f.exited = pw, exited
 	f.mu.Unlock()
 	return nil
 }
@@ -89,10 +91,28 @@ func (f *fakePipe) StopPipe(context.Context, tmux.PaneID) error {
 	defer f.mu.Unlock()
 	if f.stdin != nil {
 		_ = f.stdin.Close() // what tmux does: the command's input ends
-		go func(c *exec.Cmd) { _ = c.Wait() }(f.cmd)
 		f.stdin = nil
 	}
 	return f.stopErr
+}
+
+// waitCommand waits for the command that PipePane started to end.
+func (f *fakePipe) waitCommand() {
+	f.mu.Lock()
+	exited := f.exited
+	if f.stdin != nil {
+		_ = f.stdin.Close()
+		f.stdin = nil
+	}
+	f.mu.Unlock()
+	if exited == nil {
+		return
+	}
+	select {
+	case <-exited:
+	case <-time.After(10 * time.Second):
+		f.t.Error("the pipe command did not end")
+	}
 }
 
 func (f *fakePipe) pane(text string) {
@@ -599,5 +619,25 @@ func TestWatcherReason(t *testing.T) {
 				t.Errorf("reason = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// The command given to tmux starts a moment after pipe-pane returns. If the watch is closed
+// in between, the shell must not create a regular file where the named pipe was.
+func TestWatchLeavesNothingWhenStoppedAtOnce(t *testing.T) {
+	for range 40 {
+		run := newRunDir(t)
+		pipe := newFakePipe(t, run)
+		w, err := Watch(context.Background(), WatchConfig{Pane: "%7", RunDir: run, Pipe: pipe, Recorder: &memRecorder{}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := w.Close(); err != nil {
+			t.Fatal(err)
+		}
+		pipe.waitCommand()
+		if got := entries(t, run); len(got) != 0 {
+			t.Fatalf("left behind: %v", got)
+		}
 	}
 }
