@@ -2,6 +2,7 @@ package hook
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -48,7 +49,11 @@ type session struct {
 	script string // the rendered hook
 }
 
-func newSession(t *testing.T) *session {
+func newSession(t *testing.T) *session { return newSessionWith(t, true) }
+
+// newSessionWith starts the session; pipe says whether the pane's output is piped into a
+// file (the tests that read the raw stream), or left alone (the tests that let Kagegami pipe it).
+func newSessionWith(t *testing.T, pipe bool) *session {
 	t.Helper()
 	binary := requireTools(t)
 	dir, err := os.MkdirTemp("", "kgh") // short: a unix socket path is limited in length
@@ -79,10 +84,16 @@ func newSession(t *testing.T) *session {
 		t.Fatal(err)
 	}
 	s.pane = pane
-	if _, err := runner.Run(bg, "pipe-pane", "-t", pane, "cat >> "+tmux.ShellQuote(s.out)); err != nil {
+	// a second window, so that the session outlives the pane under test
+	if _, err := runner.Run(bg, "new-window", "-d", "sleep 600"); err != nil {
 		t.Fatal(err)
 	}
-	s.settle()
+	if pipe {
+		if _, err := runner.Run(bg, "pipe-pane", "-t", pane, "cat >> "+tmux.ShellQuote(s.out)); err != nil {
+			t.Fatal(err)
+		}
+		s.settle()
+	}
 	return s
 }
 
@@ -604,4 +615,123 @@ func (o *collected) Write(p []byte) (int, error) { return o.buf.Write(p) }
 func (o *collected) Finish(terminal.End) error {
 	o.c.outputs[o.seq] = o.buf.String()
 	return nil
+}
+
+func (s *session) client() *tmux.Client {
+	return tmux.New(s.runner, func(string) string { return "" })
+}
+
+// waitFinished reads events until n commands have finished, and returns them.
+func waitFinished(t *testing.T, w *terminal.Watcher, n int) []terminal.Event {
+	t.Helper()
+	var got []terminal.Event
+	timeout := time.After(20 * time.Second)
+	for len(got) < n {
+		select {
+		case e, ok := <-w.Events():
+			if !ok {
+				t.Fatalf("the events ended after %d of %d commands", len(got), n)
+			}
+			if e.Kind == terminal.CommandFinished {
+				got = append(got, e)
+			}
+		case <-timeout:
+			t.Fatalf("only %d of %d commands finished", len(got), n)
+		}
+	}
+	return got
+}
+
+// Kagegami's own Watch on a real pane: it pipes the pane, writes the nonce, and the hook of
+// a real zsh does the rest. Closing leaves nothing behind, and the pane can be watched again.
+func TestWatchOnARealPane(t *testing.T) {
+	s := newSessionWith(t, false)
+	s.load()
+
+	for round := 1; round <= 2; round++ {
+		rec := &collect{}
+		w, err := terminal.Watch(bg, terminal.WatchConfig{Pane: tmux.PaneID(s.pane), RunDir: s.runDir, Pipe: s.client(), Recorder: rec})
+		if err != nil {
+			t.Fatalf("round %d: %v", round, err)
+		}
+		if piped, _ := s.client().Piped(bg, tmux.PaneID(s.pane)); !piped {
+			t.Error("the pane is not piped while watched")
+		}
+
+		s.send("echo hello")
+		s.send("false")
+		s.send("seq 1 3000")
+		got := waitFinished(t, w, 3)
+		wantCmds := []string{"echo hello", "false", "seq 1 3000"}
+		for i, e := range got {
+			if e.Cmd != wantCmds[i] || e.Err != nil || e.End.Aborted {
+				t.Errorf("round %d, command %d = %+v", round, i, e)
+			}
+		}
+		if got[1].End.ExitCode != 1 {
+			t.Errorf("exit code of false = %d", got[1].End.ExitCode)
+		}
+		if out := rec.outputs[got[0].Seq]; out != "hello\r\n" {
+			t.Errorf("output of echo = %q", out)
+		}
+		if out := rec.outputs[got[2].Seq]; !strings.HasPrefix(out, "1\r\n2\r\n") || !strings.HasSuffix(out, "2999\r\n3000\r\n") || len(out) != len(seq3000()) {
+			t.Errorf("output of seq has %d bytes, want %d", len(out), len(seq3000()))
+		}
+
+		if err := w.Close(); err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+		if entries, _ := os.ReadDir(s.runDir); len(entries) != 0 {
+			t.Errorf("left behind in the run directory: %v", entries)
+		}
+		if piped, _ := s.client().Piped(bg, tmux.PaneID(s.pane)); piped {
+			t.Error("the pane is still piped after Close")
+		}
+	}
+}
+
+func seq3000() string {
+	var b strings.Builder
+	for i := 1; i <= 3000; i++ {
+		b.WriteString(strconv.Itoa(i) + "\r\n")
+	}
+	return b.String()
+}
+
+func TestWatchEndsWhenThePaneIsKilled(t *testing.T) {
+	s := newSessionWith(t, false)
+	s.load()
+	w, err := terminal.Watch(bg, terminal.WatchConfig{Pane: tmux.PaneID(s.pane), RunDir: s.runDir, Pipe: s.client(), Recorder: &collect{}, PollInterval: 50 * time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.runner.Run(bg, "kill-pane", "-t", s.pane); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- w.Wait() }()
+	select {
+	case err := <-done:
+		if !errors.Is(err, terminal.ErrPaneGone) {
+			t.Errorf("Wait = %v, want ErrPaneGone", err)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("the watch did not end")
+	}
+	for range w.Events() {
+	}
+	if entries, _ := os.ReadDir(s.runDir); len(entries) != 0 {
+		t.Errorf("left behind in the run directory: %v", entries)
+	}
+}
+
+func TestWatchRefusesAPaneThatIsAlreadyPiped(t *testing.T) {
+	s := newSession(t) // piped by the test
+	_, err := terminal.Watch(bg, terminal.WatchConfig{Pane: tmux.PaneID(s.pane), RunDir: s.runDir, Pipe: s.client(), Recorder: &collect{}})
+	if !errors.Is(err, terminal.ErrPaneBusy) {
+		t.Fatalf("err = %v, want ErrPaneBusy", err)
+	}
+	if piped, _ := s.client().Piped(bg, tmux.PaneID(s.pane)); !piped {
+		t.Error("the user's pipe was taken over")
+	}
 }
