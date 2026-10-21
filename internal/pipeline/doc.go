@@ -1,2 +1,2 @@
-// Package pipeline synthesizes an attack pipeline from the target map.
+// Package pipeline applies parsed results to the target map and synthesizes an attack pipeline from it.
 package pipeline
