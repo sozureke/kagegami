@@ -1,0 +1,13 @@
+Starting Nmap 7.991 ( https://nmap.org ) at 2026-10-21 23:05 +0200
+Nmap scan report for localhost (127.0.0.1)
+Host is up (0.0000010s latency).
+Not shown: 998 closed tcp ports (reset)
+PORT     STATE SERVICE VERSION
+22/tcp   open  ssh     OpenSSH 10.5p1 Debian 1 (protocol 2.0)
+8000/tcp open  http    SimpleHTTPServer 0.6 (Python 3.14.8)
+|_http-title: Lab
+|_http-server-header: SimpleHTTP/0.6 Python/3.14.8
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 6.38 seconds

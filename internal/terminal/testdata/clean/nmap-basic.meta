@@ -1,0 +1,6 @@
+command: nmap -sV -sC 127.0.0.1
+exit: 0
+date: 2026-10-21T21:05:28Z
+term:  0 0
+tool: Nmap version 7.991 ( https://nmap.org )
+bytes: 630
