@@ -265,3 +265,69 @@ func splitWords(seg string) (words []string, ok bool) {
 	}
 	return words, true
 }
+
+// wrappers run another program given on the same line. Those that take options with a value
+// are listed with the options that do.
+var wrappers = map[string][]string{
+	"sudo": {"-u", "-g", "-h", "-p", "-C", "-T", "-r", "-t", "-U", "-D", "-R"}, "doas": {"-u", "-C"},
+	"time": nil, "command": nil, "builtin": nil, "env": {"-u", "-C", "-S"}, "nohup": nil, "nice": {"-n"},
+	"proxychains": {"-f"}, "proxychains4": {"-f"}, "torsocks": nil, "stdbuf": nil, "timeout": nil,
+}
+
+// CommandNames lists the programs that a command line runs, by base name and in order: for
+// "cd /tmp && sudo -u kali /usr/bin/nmap -sV x | tee out" that is cd, nmap, tee. It is meant
+// for choosing a parser, so it is lenient: a line that the strict reader refuses (command
+// substitution and the like) is cut at separators and read as well as it can be.
+func CommandNames(line string) []string {
+	segments, ok := splitSegments(line)
+	if !ok {
+		segments = strings.FieldsFunc(line, func(r rune) bool { return strings.ContainsRune(";|&\n(){}`", r) })
+	}
+	var names []string
+	for _, seg := range segments {
+		words, ok := splitWords(seg)
+		if !ok {
+			words = strings.Fields(seg)
+		}
+		if name := programName(words); name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// programName finds the program in the words of one simple command.
+func programName(words []string) string {
+	for len(words) > 0 {
+		w := words[0]
+		if isAssignment(w) {
+			words = words[1:]
+			continue
+		}
+		valued, isWrapper := wrappers[path.Base(w)]
+		if !isWrapper {
+			break
+		}
+		words = words[1:]
+		for len(words) > 0 && strings.HasPrefix(words[0], "-") {
+			opt := words[0]
+			words = words[1:]
+			if slicesContains(valued, opt) && len(words) > 0 {
+				words = words[1:]
+			}
+		}
+	}
+	if len(words) == 0 {
+		return ""
+	}
+	return path.Base(strings.TrimPrefix(words[0], `\`))
+}
+
+func slicesContains(list []string, s string) bool {
+	for _, x := range list {
+		if x == s {
+			return true
+		}
+	}
+	return false
+}
