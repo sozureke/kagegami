@@ -1,0 +1,41 @@
+{
+  "hosts": [
+    {
+      "ip": "127.0.0.1"
+    }
+  ],
+  "services": [
+    {
+      "host_ip": "127.0.0.1",
+      "port": 8000,
+      "proto": "tcp",
+      "name": "http",
+      "version": "SimpleHTTP/0.6 Python/3.14.8",
+      "state": "open"
+    }
+  ],
+  "web_paths": [
+    {
+      "host_ip": "127.0.0.1",
+      "port": 8000,
+      "proto": "tcp",
+      "path": "/admin",
+      "status_code": 301
+    },
+    {
+      "host_ip": "127.0.0.1",
+      "port": 8000,
+      "proto": "tcp",
+      "path": "/admin/",
+      "status_code": 200
+    }
+  ],
+  "notes": [
+    {
+      "text": "whatweb http://127.0.0.1:8000/admin [301]: HTTPServer[SimpleHTTP/0.6 Python/3.14.8], Python[3.14.8], RedirectLocation[/admin/]"
+    },
+    {
+      "text": "whatweb http://127.0.0.1:8000/admin/ [200]: HTTPServer[SimpleHTTP/0.6 Python/3.14.8], Python[3.14.8]"
+    }
+  ]
+}

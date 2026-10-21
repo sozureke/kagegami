@@ -263,3 +263,28 @@ func FuzzCommandNames(f *testing.F) {
 		}
 	})
 }
+
+func TestCommandArgs(t *testing.T) {
+	tests := []struct {
+		line, program string
+		want          []string
+	}{
+		{"ffuf -u http://x/FUZZ -w w", "ffuf", []string{"-u", "http://x/FUZZ", "-w", "w"}},
+		{"sudo -u kali /usr/bin/gobuster dir -q", "gobuster", []string{"dir", "-q"}},
+		{"cd /tmp && ffuf -s -u 'http://a b/FUZZ'", "ffuf", []string{"-s", "-u", "http://a b/FUZZ"}},
+		{"ffuf -a | tee out; ffuf -b", "ffuf", []string{"-a"}},
+		{"echo ffuf -x", "ffuf", nil},
+		{"ffuf", "ffuf", []string{}},
+		{"ls", "ffuf", nil},
+		{"", "ffuf", nil},
+	}
+	for _, tt := range tests {
+		got := CommandArgs(tt.line, tt.program)
+		if len(got) == 0 && len(tt.want) == 0 && (got == nil) == (tt.want == nil) {
+			continue
+		}
+		if !reflect.DeepEqual(got, tt.want) {
+			t.Errorf("CommandArgs(%q, %q) = %q, want %q", tt.line, tt.program, got, tt.want)
+		}
+	}
+}

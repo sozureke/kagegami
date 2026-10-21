@@ -1,0 +1,41 @@
+{
+  "web_paths": [
+    {
+      "host_ip": "127.0.0.1",
+      "port": 8000,
+      "proto": "tcp",
+      "path": "/admin",
+      "status_code": 301,
+      "note": "redirects to /admin/"
+    },
+    {
+      "host_ip": "127.0.0.1",
+      "port": 8000,
+      "proto": "tcp",
+      "path": "/img",
+      "status_code": 301,
+      "note": "redirects to /img/"
+    },
+    {
+      "host_ip": "127.0.0.1",
+      "port": 8000,
+      "proto": "tcp",
+      "path": "/index.html",
+      "status_code": 200
+    },
+    {
+      "host_ip": "127.0.0.1",
+      "port": 8000,
+      "proto": "tcp",
+      "path": "/login.html",
+      "status_code": 200
+    },
+    {
+      "host_ip": "127.0.0.1",
+      "port": 8000,
+      "proto": "tcp",
+      "path": "/robots.txt",
+      "status_code": 200
+    }
+  ]
+}

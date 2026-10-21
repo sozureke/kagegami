@@ -1,0 +1,26 @@
+===============================================================
+Gobuster v3.8.2
+by OJ Reeves (@TheColonial) & Christian Mehlmauer (@firefart)
+===============================================================
+[+] Url:                     http://127.0.0.1:8000
+[+] Method:                  GET
+[+] Threads:                 10
+[+] Wordlist:                /usr/share/wordlists/dirb/common.txt
+[+] Negative Status codes:   404
+[+] User Agent:              gobuster/3.8.2
+[+] Extensions:              html,txt
+[+] Timeout:                 10s
+===============================================================
+Starting gobuster in directory enumeration mode
+===============================================================
+[2Kadmin               [36m (Status: 301)[0m [Size: 0][34m [--> /admin/][0m
+[2KProgress: 1861 / 13839 (13.45%)[2KProgress: 3683 / 13839 (26.61%)[2KProgress: 5534 / 13839 (39.99%)[2Kimg                 [36m (Status: 301)[0m [Size: 0][34m [--> /img/][0m
+[2Kindex.html          [32m (Status: 200)[0m [Size: 46]
+[2Kindex.html          [32m (Status: 200)[0m [Size: 46]
+[2Klogin.html          [32m (Status: 200)[0m [Size: 2]
+[2KProgress: 7221 / 13839 (52.18%)[2KProgress: 9085 / 13839 (65.65%)[2Krobots.txt          [32m (Status: 200)[0m [Size: 2]
+[2Krobots.txt          [32m (Status: 200)[0m [Size: 2]
+[2KProgress: 10945 / 13839 (79.09%)[2KProgress: 12604 / 13839 (91.08%)[2KProgress: 13835 / 13839 (99.97%)[2KProgress: 13839 / 13839 (100.00%)
+===============================================================
+Finished
+===============================================================

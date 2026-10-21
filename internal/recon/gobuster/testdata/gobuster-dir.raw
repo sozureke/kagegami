@@ -1,0 +1,22 @@
+===============================================================
+Gobuster v3.8.2
+by OJ Reeves (@TheColonial) & Christian Mehlmauer (@firefart)
+===============================================================
+[+] Url:                     http://127.0.0.1:8000
+[+] Method:                  GET
+[+] Threads:                 10
+[+] Wordlist:                /usr/share/wordlists/dirb/common.txt
+[+] Negative Status codes:   404
+[+] User Agent:              gobuster/3.8.2
+[+] Timeout:                 10s
+===============================================================
+Starting gobuster in directory enumeration mode
+===============================================================
+[2Kadmin               [36m (Status: 301)[0m [Size: 0][34m [--> /admin/][0m
+[2KProgress: 1852 / 4613 (40.15%)[2Kimg                 [36m (Status: 301)[0m [Size: 0][34m [--> /img/][0m
+[2Kindex.html          [32m (Status: 200)[0m [Size: 46]
+[2Krobots.txt          [32m (Status: 200)[0m [Size: 2]
+[2KProgress: 3715 / 4613 (80.53%)[2KProgress: 4609 / 4613 (99.91%)[2KProgress: 4609 / 4613 (99.91%)[2KProgress: 4613 / 4613 (100.00%)
+===============================================================
+Finished
+===============================================================

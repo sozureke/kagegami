@@ -204,3 +204,24 @@ func FuzzParseDelta(f *testing.F) {
 		}
 	})
 }
+
+func TestWebPathHostByNameOrAddress(t *testing.T) {
+	ok := []WebPathDelta{
+		{HostIP: "10.0.0.1", Port: 80, Proto: "tcp", Path: "/"},
+		{Host: " Box.HTB ", Port: 80, Proto: "tcp", Path: "/"},
+	}
+	got, err := StateDelta{WebPaths: ok}.Validate()
+	if err != nil || got.WebPaths[1].Host != "box.htb" {
+		t.Fatalf("Validate = %+v, %v", got.WebPaths, err)
+	}
+	for name, w := range map[string]WebPathDelta{
+		"neither":       {Port: 80, Proto: "tcp", Path: "/"},
+		"both":          {HostIP: "10.0.0.1", Host: "box.htb", Port: 80, Proto: "tcp", Path: "/"},
+		"a bad address": {HostIP: "x", Port: 80, Proto: "tcp", Path: "/"},
+		"a long name":   {Host: strings.Repeat("a", 254), Port: 80, Proto: "tcp", Path: "/"},
+	} {
+		if _, err := (StateDelta{WebPaths: []WebPathDelta{w}}).Validate(); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: err = %v", name, err)
+		}
+	}
+}

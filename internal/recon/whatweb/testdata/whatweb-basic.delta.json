@@ -1,0 +1,22 @@
+{
+  "hosts": [
+    {
+      "ip": "127.0.0.1"
+    }
+  ],
+  "services": [
+    {
+      "host_ip": "127.0.0.1",
+      "port": 8000,
+      "proto": "tcp",
+      "name": "http",
+      "version": "SimpleHTTP/0.6 Python/3.14.8",
+      "state": "open"
+    }
+  ],
+  "notes": [
+    {
+      "text": "whatweb http://127.0.0.1:8000 [200]: HTTPServer[SimpleHTTP/0.6 Python/3.14.8], Python[3.14.8], Title[Lab]"
+    }
+  ]
+}

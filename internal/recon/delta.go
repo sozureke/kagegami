@@ -45,9 +45,12 @@ type ServiceDelta struct {
 	State   string `json:"state,omitempty"` // open, closed or filtered
 }
 
-// WebPathDelta describes a path found on a web service.
+// WebPathDelta describes a path found on a web service. The host is given by its address, or,
+// when only a name is known (a scan of http://box.htb/), by Host: the path is then stored if
+// the map already has a host with that name.
 type WebPathDelta struct {
-	HostIP     string `json:"host_ip"`
+	HostIP     string `json:"host_ip,omitempty"`
+	Host       string `json:"host,omitempty"`
 	Port       int    `json:"port"`
 	Proto      string `json:"proto"`
 	Path       string `json:"path"`
@@ -147,9 +150,17 @@ func (d StateDelta) Validate() (StateDelta, error) {
 		out.Services = append(out.Services, s)
 	}
 	for i, w := range d.WebPaths {
-		ip, err := address(w.HostIP)
+		var err error
+		w.Host = strings.ToLower(strings.TrimSpace(w.Host))
+		switch {
+		case w.HostIP != "" && w.Host != "":
+			err = errors.New("give the host as an address or as a name, not both")
+		case w.HostIP == "":
+			err = firstError(required("host", w.Host), size("host", w.Host, maxHostnameLen))
+		default:
+			w.HostIP, err = address(w.HostIP)
+		}
 		if err == nil {
-			w.HostIP = ip
 			w.Proto = strings.ToLower(strings.TrimSpace(w.Proto))
 			w.Path = strings.TrimSpace(w.Path)
 			w.Note = strings.TrimSpace(w.Note)

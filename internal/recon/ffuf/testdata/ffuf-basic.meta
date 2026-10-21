@@ -1,0 +1,6 @@
+command: ffuf -u http://127.0.0.1:8000/FUZZ -w /usr/share/wordlists/dirb/common.txt
+exit: 0
+date: 2026-10-21T21:05:31Z
+term:  0 0
+tool: flag provided but not defined: -version
+bytes: 2817
