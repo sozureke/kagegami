@@ -9,6 +9,15 @@ commands:
     short: Create the configuration (and optionally a case)
   watch:
     short: Open the side panel next to your terminal (tmux)
+  hook:
+    short: Print the shell hook that lets Kagegami see where commands start and end
+    long: |-
+      Print the hook for your shell (zsh). Add this line to your shell's startup file:
+
+          eval "$(kagegami hook zsh)"
+
+      The hook prints invisible markers around each command while Kagegami watches the
+      pane, and does nothing otherwise.
   next:
     short: Suggest the next recon step
   report:

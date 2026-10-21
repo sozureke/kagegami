@@ -28,6 +28,7 @@ func OSEnv() (Env, error) {
 type Paths struct {
 	configDir  string
 	dataDir    string
+	runDir     string
 	configFile string
 }
 
@@ -40,6 +41,7 @@ func NewPaths(env Env) (Paths, error) {
 		}
 		p.configDir = root
 		p.dataDir = filepath.Join(root, "data")
+		p.runDir = filepath.Join(root, "run")
 	} else {
 		var err error
 		if p.configDir, err = xdgDir(env, "XDG_CONFIG_HOME", ".config"); err != nil {
@@ -48,6 +50,7 @@ func NewPaths(env Env) (Paths, error) {
 		if p.dataDir, err = xdgDir(env, "XDG_DATA_HOME", filepath.Join(".local", "share")); err != nil {
 			return Paths{}, err
 		}
+		p.runDir = filepath.Join(p.dataDir, "run")
 	}
 
 	p.configFile = filepath.Join(p.configDir, "config.yaml")
@@ -75,8 +78,11 @@ func (p Paths) ConfigDir() string    { return p.configDir }
 func (p Paths) ConfigFile() string   { return p.configFile }
 func (p Paths) TemplatesDir() string { return filepath.Join(p.configDir, "templates") }
 func (p Paths) DataDir() string      { return p.dataDir }
-func (p Paths) CasesDir() string     { return filepath.Join(p.dataDir, "cases") }
-func (p Paths) LogsDir() string      { return filepath.Join(p.dataDir, "logs") }
+
+// RunDir holds short-lived files of a running kagegami, such as the capture nonces.
+func (p Paths) RunDir() string   { return p.runDir }
+func (p Paths) CasesDir() string { return filepath.Join(p.dataDir, "cases") }
+func (p Paths) LogsDir() string  { return filepath.Join(p.dataDir, "logs") }
 
 var (
 	ErrInvalidCaseName = errors.New("invalid case name")
