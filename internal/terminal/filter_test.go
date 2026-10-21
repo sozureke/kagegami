@@ -236,3 +236,30 @@ func FuzzJudge(f *testing.F) {
 		}
 	})
 }
+
+func TestCommandNames(t *testing.T) {
+	tests := map[string][]string{
+		"ls":                       {"ls"},
+		"sudo -u root /bin/ls -la": {"ls"},
+		"a | b && c ; d":           {"a", "b", "c", "d"},
+		"":                         nil,
+	}
+	for line, want := range tests {
+		if got := CommandNames(line); !reflect.DeepEqual(got, want) {
+			t.Errorf("CommandNames(%q) = %q, want %q", line, got, want)
+		}
+	}
+}
+
+func FuzzCommandNames(f *testing.F) {
+	for _, s := range []string{"sudo nmap x", `echo "a`, "$(x) | y", "\\", "'"} {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, line string) {
+		for _, name := range CommandNames(line) {
+			if name == "" || strings.ContainsAny(name, "/") && name != "/" {
+				t.Fatalf("CommandNames(%q) has the name %q", line, name)
+			}
+		}
+	})
+}
