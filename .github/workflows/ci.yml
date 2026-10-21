@@ -44,7 +44,17 @@ jobs:
       - name: Install tmux and zsh
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y tmux zsh
+      # The versions the tests really ran against: the record of verified tmux versions
+      # (ADR-0007) is taken from this output, not from assumptions about the runner image.
+      - name: Show tmux and zsh versions
+        run: |
+          tmux -V || echo "tmux is not installed on this runner"
+          zsh --version || echo "zsh is not installed on this runner"
       - run: make test
+        env:
+          # On Linux the tmux tests must run, not be skipped silently. macOS runners do not
+          # pin a tmux version, so there the tests skip with a visible message.
+          KAGEGAMI_REQUIRE_TMUX: ${{ runner.os == 'Linux' && '1' || '' }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: runner.os == 'Linux'
         with:
