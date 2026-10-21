@@ -2,11 +2,20 @@ package cli
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/sozureke/kagegami/internal/pipeline"
+	"github.com/sozureke/kagegami/internal/recon"
+	"github.com/sozureke/kagegami/internal/secret"
+	"github.com/sozureke/kagegami/internal/store"
 )
 
 var testInfo = BuildInfo{Version: "1.2.3", Commit: "abc1234", Date: "2026-01-02T03:04:05Z"}
@@ -124,5 +133,107 @@ func TestHookCommand(t *testing.T) {
 	t.Setenv("KAGEGAMI_HOME", "relative")
 	if code, stdout, _ := runCLI(t, "hook", "zsh"); code == 0 || stdout != "" {
 		t.Errorf("a bad KAGEGAMI_HOME must fail without printing a script: code %d", code)
+	}
+}
+
+// caseWithHost makes a case named name that holds one host, one service and one credential.
+func caseWithHost(t *testing.T, home, name string) {
+	t.Helper()
+	t.Setenv("KAGEGAMI_HOME", home)
+	if code, _, stderr := runCLI(t, "init", "--case", name); code != 0 {
+		t.Fatalf("init: %d %s", code, stderr)
+	}
+	st, err := store.Open(context.Background(), filepath.Join(home, "data", "cases", name, store.FileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = st.Close() }()
+	d := recon.StateDelta{
+		Hosts:    []recon.HostDelta{{IP: "10.0.0.5", Hostname: "box.htb", Status: "up"}},
+		Services: []recon.ServiceDelta{{HostIP: "10.0.0.5", Port: 22, Proto: "tcp", State: "open", Name: "ssh", Version: "OpenSSH 8.2"}},
+	}
+	if _, err := pipeline.Apply(context.Background(), st, d, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.Repo().UpsertCredential(context.Background(), store.Credential{Username: "admin", Secret: secret.New("topsecret-123"), Kind: "password"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMapCommand(t *testing.T) {
+	home := t.TempDir()
+	caseWithHost(t, home, "htb-box")
+
+	t.Run("the only case is used, and secrets are masked", func(t *testing.T) {
+		code, stdout, stderr := runCLI(t, "map")
+		if code != 0 || stderr != "" {
+			t.Fatalf("code %d, stderr %q", code, stderr)
+		}
+		for _, want := range []string{"10.0.0.5  box.htb", "22/tcp", "OpenSSH 8.2", "admin", "•••"} {
+			if !strings.Contains(stdout, want) {
+				t.Errorf("%q is missing from:\n%s", want, stdout)
+			}
+		}
+		if strings.Contains(stdout, "topsecret-123") {
+			t.Fatal("a secret was printed")
+		}
+	})
+	t.Run("json", func(t *testing.T) {
+		code, stdout, _ := runCLI(t, "map", "--json", "--case", "htb-box")
+		var v struct {
+			Hosts       []map[string]any `json:"hosts"`
+			Credentials []map[string]any `json:"credentials"`
+		}
+		if code != 0 || json.Unmarshal([]byte(stdout), &v) != nil || len(v.Hosts) != 1 || v.Credentials[0]["secret"] != "•••" {
+			t.Errorf("code %d, output:\n%s", code, stdout)
+		}
+		if strings.Contains(stdout, "topsecret-123") {
+			t.Fatal("a secret was printed")
+		}
+	})
+	t.Run("a case that does not exist is not created", func(t *testing.T) {
+		code, _, stderr := runCLI(t, "map", "--case", "typo")
+		if code != 1 || !strings.Contains(stderr, `no case "typo"`) || !strings.Contains(stderr, "kagegami init --case typo") {
+			t.Errorf("code %d, stderr %q", code, stderr)
+		}
+		if _, err := os.Stat(filepath.Join(home, "data", "cases", "typo")); err == nil {
+			t.Error("the command created a case")
+		}
+	})
+	t.Run("an invalid case name is a usage error", func(t *testing.T) {
+		if code, _, _ := runCLI(t, "map", "--case", "../etc"); code != 2 {
+			t.Errorf("code %d", code)
+		}
+	})
+	t.Run("several cases need a choice", func(t *testing.T) {
+		caseWithHost(t, home, "another")
+		code, _, stderr := runCLI(t, "map")
+		if code != 2 || !strings.Contains(stderr, "another, htb-box") || !strings.Contains(stderr, "--case") {
+			t.Errorf("code %d, stderr %q", code, stderr)
+		}
+		if code, stdout, _ := runCLI(t, "map", "--case", "another"); code != 0 || !strings.Contains(stdout, "10.0.0.5") {
+			t.Errorf("code %d", code)
+		}
+	})
+	t.Run("a folder without a database is not a case", func(t *testing.T) {
+		if err := os.MkdirAll(filepath.Join(home, "data", "cases", "stray"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, stderr := runCLI(t, "map"); strings.Contains(stderr, "stray") {
+			t.Errorf("stderr %q", stderr)
+		}
+	})
+	t.Run("extra arguments", func(t *testing.T) {
+		if code, _, _ := runCLI(t, "map", "extra"); code != 2 {
+			t.Errorf("code %d", code)
+		}
+	})
+}
+
+func TestMapWithoutAnyCase(t *testing.T) {
+	t.Setenv("KAGEGAMI_HOME", t.TempDir())
+	code, _, stderr := runCLI(t, "map")
+	if code != 1 || !strings.Contains(stderr, "kagegami init --case NAME") {
+		t.Errorf("code %d, stderr %q", code, stderr)
 	}
 }

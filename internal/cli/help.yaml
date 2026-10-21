@@ -24,5 +24,11 @@ commands:
     short: Generate the Markdown report
   map:
     short: Show the target map
+    long: |-
+      Print the map of a case: hosts, their services, the web paths found on them,
+      findings, credentials (always masked) and the agent's notes.
+
+      Closed ports, long path lists and old notes are folded; --all shows everything.
+      --json prints the whole map as JSON. The command only reads the case.
   version:
     short: Print version information
