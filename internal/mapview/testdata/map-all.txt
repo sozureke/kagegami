@@ -1,0 +1,24 @@
+127.0.0.1  localhost  Linux  [up]
+├─ 22/tcp     open      ssh        OpenSSH 10.5p1 Debian 1 (protocol 2.0)
+├─ 80/tcp     closed    http
+└─ 8000/tcp   open      http       SimpleHTTP/0.6 Python/3.14.8
+      /                              200
+      /admin                         301  redirects to /admin/
+      /admin/                             Possible admin folder
+      /admin/index.html                   Possible admin folder
+      /img                           301  redirects to /img/
+      /img/                               Potentially interesting folder
+      /index.html                    200
+      /login.html                    200  Possible admin folder
+      /robots.txt                    200  Robots file
+127.0.0.2  localhost  Linux  [up]
+├─ 22/tcp     open      ssh        OpenSSH 10.5p1 Debian 1 (protocol 2.0)
+├─ 80/tcp     closed    http
+└─ 8000/tcp   closed    http-alt
+
+Notes
+  · nmap http-title 127.0.0.1 8000/tcp: Lab
+  · nmap http-server-header 127.0.0.1 8000/tcp: SimpleHTTP/0.6 Python/3.14.8
+  · nmap http-methods 127.0.0.1 8000/tcp: Supported Methods: GET HEAD
+  · nmap http-headers 127.0.0.1 8000/tcp: Server: SimpleHTTP/0.6 Python/3.14.8; Date: Wed, 21 Oct 2026 21:47:53 GMT; Content-type: text/html; Content-Length: 46; Last-Modified: Wed, 21 Oct 2026 21:04:51 GMT; (Request type: HEAD)
+  · whatweb http://127.0.0.1:8000 [200]: HTTPServer[SimpleHTTP/0.6 Python/3.14.8], Python[3.14.8], Title[Lab]
