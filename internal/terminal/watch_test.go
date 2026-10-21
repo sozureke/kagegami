@@ -254,6 +254,7 @@ func TestWatchLeavesNothingBehindWhenClosed(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 	// Close has waited for the clean-up: nothing may be left by the time it returns
+	pipe.waitCommand() // a late pipe command may still be on its way
 	if got := entries(t, run); len(got) != 0 {
 		t.Errorf("left behind when Close returned: %v", got)
 	}
@@ -309,6 +310,7 @@ func TestWatchEndsWhenThePaneIsClosed(t *testing.T) {
 	}
 	for range w.Events() {
 	}
+	pipe.waitCommand() // the command of a pipe that was stopped at once may still be on its way
 	if got := entries(t, run); len(got) != 0 {
 		t.Errorf("left behind: %v", got)
 	}
@@ -333,6 +335,7 @@ func TestWatchEndsWhenTheContextEnds(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("the watch did not stop")
 	}
+	pipe.waitCommand() // the command of a pipe that was stopped at once may still be on its way
 	if got := entries(t, run); len(got) != 0 {
 		t.Errorf("left behind: %v", got)
 	}
@@ -577,6 +580,7 @@ func TestWatchReportsAFailureToStopThePipe(t *testing.T) {
 			if !tc.wantErr && err != nil {
 				t.Errorf("Close = %v: a pane that is already gone is not a failure", err)
 			}
+			pipe.waitCommand() // a late pipe command may still be on its way
 			if got := entries(t, run); len(got) != 0 {
 				t.Errorf("left behind: %v", got)
 			}
@@ -619,6 +623,7 @@ func TestWatchCleansUpWhenTheNonceFileCannotBeWritten(t *testing.T) {
 	if pipe.called("stop") != 1 {
 		t.Error("the pipe that had been started was not stopped")
 	}
+	pipe.waitCommand() // a late pipe command may still be on its way
 	if got := entries(t, run); len(got) != 1 || got[0] != "7.nonce" {
 		t.Errorf("left behind: %v (only the blocker may remain)", got)
 	}

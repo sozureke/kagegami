@@ -119,6 +119,9 @@ func removeStalePipes(runDir string, pane tmux.PaneID) error {
 	return nil
 }
 
+// readerGrace is how long the reader of the named pipe outlives the pipe file.
+const readerGrace = 2 * time.Second
+
 // Watch starts capturing the commands of pane. The order matters and is part of the contract:
 // the pipe is open before the nonce file appears, so that the first marked command is not
 // lost; and the nonce file goes first when the watch ends, so that the hook stops marking
@@ -175,13 +178,13 @@ func Watch(ctx context.Context, cfg WatchConfig) (*Watcher, error) {
 			}
 			cancel()
 		}
-		// The pipe file goes before the reader is closed: a command that starts late either
-		// finds the pipe with a reader on it, or finds no pipe at all. A pipe without a
-		// reader would block its writer for ever.
+		// The pipe file goes first. The reader stays open a little longer: a command that
+		// had found the pipe just before it was removed may still be in the middle of
+		// opening it, and a named pipe without a reader blocks its writer for ever.
 		if err := os.Remove(fifo); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			errs = append(errs, fmt.Errorf("remove the pipe file: %w", err))
 		}
-		_ = r.Close()
+		time.AfterFunc(readerGrace, func() { _ = r.Close() })
 		return errors.Join(errs...)
 	}
 
