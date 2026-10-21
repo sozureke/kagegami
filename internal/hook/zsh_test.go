@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sozureke/kagegami/internal/terminal"
 	"github.com/sozureke/kagegami/pkg/tmux"
 )
 
@@ -86,7 +87,7 @@ func newSession(t *testing.T) *session {
 }
 
 func (s *session) nonceFile() string {
-	return filepath.Join(s.runDir, strings.TrimPrefix(s.pane, "%")+".nonce")
+	return filepath.Join(s.runDir, terminal.NonceFileName(tmux.PaneID(s.pane)))
 }
 
 func (s *session) watch(content string) {
@@ -517,4 +518,90 @@ func TestZshHookCutsAVeryLongCommandText(t *testing.T) {
 	if len(ev) != 2 || len(ev[0].fields["cmd"]) != 4096 || ev[1].kind != "D" {
 		t.Errorf("markers = %d, command text of %d characters; want 2 markers and 4096 characters", len(ev), len(ev[0].fields["cmd"]))
 	}
+}
+
+// The whole path on a real shell: the nonce file written by Kagegami's own code, the hook in
+// zsh, the raw stream of the pane, and Capture reading it.
+func TestCaptureOnTheStreamOfARealZsh(t *testing.T) {
+	s := newSession(t)
+	s.load()
+
+	nonce, err := terminal.NewNonce()
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := terminal.WriteNonceFile(s.runDir, tmux.PaneID(s.pane), nonce)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Remove() }()
+
+	s.run("echo hello")
+	s.run("false")
+	s.run("seq 1 3000")
+	s.run("print -r -- 'a;b=c'; (exit 9)")
+
+	events := make(chan terminal.Event, 64)
+	rec := &collect{}
+	if err := terminal.Capture(bg, strings.NewReader(s.stream()), nonce, rec, events); err != nil {
+		t.Fatal(err)
+	}
+	close(events)
+
+	var finished []terminal.Event
+	for e := range events {
+		if e.Kind == terminal.CommandFinished {
+			finished = append(finished, e)
+		}
+	}
+	type want struct {
+		cmd string
+		rc  int
+		out string
+	}
+	var seq strings.Builder
+	for i := 1; i <= 3000; i++ {
+		seq.WriteString(strconv.Itoa(i) + "\r\n")
+	}
+	wants := []want{
+		{"echo hello", 0, "hello\r\n"},
+		{"false", 1, ""},
+		{"seq 1 3000", 0, seq.String()},
+		{"print -r -- 'a;b=c'; (exit 9)", 9, "a;b=c\r\n"},
+	}
+	if len(finished) != len(wants) {
+		t.Fatalf("%d commands captured, want %d", len(finished), len(wants))
+	}
+	for i, w := range wants {
+		e := finished[i]
+		if e.Cmd != w.cmd || e.End.ExitCode != w.rc || e.Err != nil || e.End.Aborted {
+			t.Errorf("command %d = %q rc=%d aborted=%v err=%v; want %q rc=%d", i, e.Cmd, e.End.ExitCode, e.End.Aborted, e.Err, w.cmd, w.rc)
+		}
+		if got := rec.outputs[e.Seq]; got != w.out {
+			t.Errorf("command %d output = %.60q (%d bytes), want %.60q (%d bytes)", i, got, len(got), w.out, len(w.out))
+		}
+	}
+}
+
+// collect keeps recorded output in memory, by command number.
+type collect struct{ outputs map[int]string }
+
+type collected struct {
+	c   *collect
+	seq int
+	buf strings.Builder
+}
+
+func (c *collect) Begin(seq int, _ string) (terminal.Output, error) {
+	if c.outputs == nil {
+		c.outputs = map[int]string{}
+	}
+	return &collected{c: c, seq: seq}, nil
+}
+
+func (o *collected) Write(p []byte) (int, error) { return o.buf.Write(p) }
+
+func (o *collected) Finish(terminal.End) error {
+	o.c.outputs[o.seq] = o.buf.String()
+	return nil
 }
