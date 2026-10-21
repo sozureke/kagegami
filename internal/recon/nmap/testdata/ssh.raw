@@ -1,0 +1,16 @@
+Starting Nmap 7.991 ( https://nmap.org ) at 2026-10-21 23:47 +0200
+Nmap scan report for localhost (127.0.0.1)
+Host is up (0.000035s latency).
+
+PORT   STATE SERVICE VERSION
+22/tcp open  ssh?
+| fingerprint-strings: 
+|   NULL: 
+|_    Not allowed at this time
+|_ssh-auth-methods: ERROR: Script execution failed (use -d to debug)
+1 service unrecognized despite returning data. If you know the service/version, please submit the following fingerprint at https://nmap.org/cgi-bin/submit.cgi?new-service :
+SF-Port22-TCP:V=7.991%I=7%D=10/21%Time=6AD93309%P=aarch64-unknown-linux-gn
+SF:u%r(NULL,1A,"Not\x20allowed\x20at\x20this\x20time\r\n");
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 0.20 seconds

@@ -1,0 +1,54 @@
+Starting Nmap 7.991 ( https://nmap.org ) at 2026-10-21 23:47 +0200
+NSE: Loaded 158 scripts for scanning.
+NSE: Script Pre-scanning.
+Initiating NSE at 23:47
+Completed NSE at 23:47, 0.00s elapsed
+Initiating NSE at 23:47
+Completed NSE at 23:47, 0.00s elapsed
+Initiating NSE at 23:47
+Completed NSE at 23:47, 0.00s elapsed
+Initiating Parallel DNS resolution of 1 host. at 23:47
+Completed Parallel DNS resolution of 1 host. at 23:47, 0.00s elapsed
+Initiating SYN Stealth Scan at 23:47
+Scanning localhost (127.0.0.1) [1000 ports]
+Discovered open port 22/tcp on 127.0.0.1
+Discovered open port 8000/tcp on 127.0.0.1
+Completed SYN Stealth Scan at 23:47, 0.01s elapsed (1000 total ports)
+Initiating Service scan at 23:47
+Scanning 2 services on localhost (127.0.0.1)
+Completed Service scan at 23:47, 6.01s elapsed (2 services on 1 host)
+NSE: Script scanning 127.0.0.1.
+Initiating NSE at 23:47
+Completed NSE at 23:47, 0.06s elapsed
+Initiating NSE at 23:47
+Completed NSE at 23:47, 0.01s elapsed
+Initiating NSE at 23:47
+Completed NSE at 23:47, 0.00s elapsed
+Nmap scan report for localhost (127.0.0.1)
+Host is up (0.0000010s latency).
+Not shown: 998 closed tcp ports (reset)
+PORT     STATE SERVICE VERSION
+22/tcp   open  ssh?
+| fingerprint-strings: 
+|   NULL: 
+|_    Not allowed at this time
+8000/tcp open  http    SimpleHTTPServer 0.6 (Python 3.14.8)
+|_http-title: Lab
+| http-methods: 
+|_  Supported Methods: GET HEAD
+|_http-server-header: SimpleHTTP/0.6 Python/3.14.8
+1 service unrecognized despite returning data. If you know the service/version, please submit the following fingerprint at https://nmap.org/cgi-bin/submit.cgi?new-service :
+SF-Port22-TCP:V=7.991%I=7%D=10/21%Time=6AD93302%P=aarch64-unknown-linux-gn
+SF:u%r(NULL,1A,"Not\x20allowed\x20at\x20this\x20time\r\n");
+
+NSE: Script Post-scanning.
+Initiating NSE at 23:47
+Completed NSE at 23:47, 0.00s elapsed
+Initiating NSE at 23:47
+Completed NSE at 23:47, 0.00s elapsed
+Initiating NSE at 23:47
+Completed NSE at 23:47, 0.00s elapsed
+Read data files from: /usr/share/nmap
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 6.26 seconds
+           Raw packets sent: 1000 (44.000KB) | Rcvd: 2002 (84.088KB)

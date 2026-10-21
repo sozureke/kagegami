@@ -1,0 +1,14 @@
+{
+  "hosts": [
+    {
+      "ip": "127.0.0.1",
+      "hostname": "localhost",
+      "status": "up"
+    },
+    {
+      "ip": "127.0.0.2",
+      "hostname": "localhost",
+      "status": "up"
+    }
+  ]
+}

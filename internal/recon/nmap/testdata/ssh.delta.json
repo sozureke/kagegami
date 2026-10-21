@@ -1,0 +1,18 @@
+{
+  "hosts": [
+    {
+      "ip": "127.0.0.1",
+      "hostname": "localhost",
+      "status": "up"
+    }
+  ],
+  "services": [
+    {
+      "host_ip": "127.0.0.1",
+      "port": 22,
+      "proto": "tcp",
+      "name": "ssh",
+      "state": "open"
+    }
+  ]
+}
