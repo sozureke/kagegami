@@ -1,0 +1,8 @@
+Starting Nmap 7.991 ( https://nmap.org ) at 2026-10-21 23:05 +0200
+Nmap scan report for localhost (127.0.0.1)
+Host is up (0.000027s latency).
+
+PORT  STATE  SERVICE
+9/tcp closed discard
+
+Nmap done: 1 IP address (1 host up) scanned in 0.10 seconds
