@@ -16,7 +16,6 @@ CREATE TABLE output_blob (
     id          INTEGER PRIMARY KEY,
     cmd         TEXT    NOT NULL,
     exit_code   INTEGER,
-    path        TEXT    NOT NULL,
     size        INTEGER NOT NULL DEFAULT 0 CHECK (size >= 0),
     sha256      TEXT    NOT NULL DEFAULT '',
     started_at  INTEGER NOT NULL,
@@ -61,10 +60,12 @@ CREATE TABLE credential (
     id             INTEGER PRIMARY KEY,
     username       TEXT    NOT NULL DEFAULT '',
     secret         TEXT    NOT NULL DEFAULT '',
-    kind           TEXT    NOT NULL DEFAULT 'password',
+    kind           TEXT    NOT NULL DEFAULT 'password' CHECK (kind IN ('password', 'hash', 'key', 'token', 'other')),
     works_on       TEXT    NOT NULL DEFAULT '',
     source_blob_id INTEGER REFERENCES output_blob(id) ON DELETE SET NULL,
-    created_at     INTEGER NOT NULL
+    created_at     INTEGER NOT NULL,
+    CHECK (username <> '' OR secret <> ''),
+    UNIQUE (username, secret, kind)
 ) STRICT;
 
 CREATE TABLE finding (

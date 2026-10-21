@@ -396,7 +396,7 @@ func TestSchemaRejectsInvalidData(t *testing.T) {
 		{"unknown severity", "INSERT INTO finding (severity, title, created_at) VALUES ('urgent', 't', 1)"},
 		{"unknown journal author", "INSERT INTO journal_entry (ts, author, text) VALUES (1, 'bot', 't')"},
 		{"second engagement row", "INSERT INTO engagement (id, name, created_at) VALUES (2, 'second', 1)"},
-		{"negative blob size", "INSERT INTO output_blob (cmd, path, size, started_at) VALUES ('c', 'p', -1, 1)"},
+		{"negative blob size", "INSERT INTO output_blob (cmd, size, started_at) VALUES ('c', -1, 1)"},
 		{"host without ip", "INSERT INTO host (first_seen, last_seen) VALUES (1, 1)"},
 	}
 	for _, tt := range tests {
@@ -446,7 +446,7 @@ func TestDeletingAHostCascades(t *testing.T) {
 
 func TestDeletingABlobKeepsEntitiesAndClearsTheLink(t *testing.T) {
 	s, _ := openTemp(t)
-	mustExec(t, s, "INSERT INTO output_blob (id, cmd, path, started_at) VALUES (1, 'nmap x', 'raw/1.txt', 1)")
+	mustExec(t, s, "INSERT INTO output_blob (id, cmd, started_at) VALUES (1, 'nmap x', 1)")
 	mustExec(t, s, "INSERT INTO host (id, ip, first_seen, last_seen, source_blob_id) VALUES (1, '10.0.0.1', 1, 1, 1)")
 	mustExec(t, s, "INSERT INTO service (id, host_id, port, proto, source_blob_id) VALUES (1, 1, 80, 'tcp', 1)")
 	mustExec(t, s, "INSERT INTO web_path (service_id, path, source_blob_id) VALUES (1, '/admin', 1)")
