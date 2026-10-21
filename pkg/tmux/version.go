@@ -17,6 +17,7 @@ var ErrVersion = errors.New("unrecognized tmux version")
 // still works if the capture self-check passes, but is reported as unverified.
 var VerifiedVersions = []Version{
 	{Major: 3, Minor: 8}, // development machine, see ADR-0007
+	{Major: 3, Minor: 4}, // GitHub Actions ubuntu-24.04 image, CI run 39582742565, see ADR-0007
 }
 
 // Version is a tmux version such as 3.3a. The letter suffix is kept but does not take
