@@ -247,3 +247,26 @@ func TestOSEnv(t *testing.T) {
 		t.Errorf("Getenv(KAGEGAMI_HOME) = %q, want /tmp/kg-root", got)
 	}
 }
+
+func TestRunDir(t *testing.T) {
+	tests := []struct {
+		name string
+		env  Env
+		want string
+	}{
+		{"default", fakeEnv("/home/u", nil), "/home/u/.local/share/kagegami/run"},
+		{"xdg data", fakeEnv("/home/u", map[string]string{"XDG_DATA_HOME": "/xd"}), "/xd/kagegami/run"},
+		{"KAGEGAMI_HOME", fakeEnv("/home/u", map[string]string{"KAGEGAMI_HOME": "/kg", "XDG_DATA_HOME": "/xd"}), "/kg/run"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, err := NewPaths(tt.env)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := p.RunDir(); got != tt.want {
+				t.Errorf("RunDir() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

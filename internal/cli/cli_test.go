@@ -103,3 +103,26 @@ func TestHelpTextMatchesCommands(t *testing.T) {
 		t.Error("root short and long descriptions must not be empty")
 	}
 }
+
+func TestHookCommand(t *testing.T) {
+	t.Setenv("KAGEGAMI_HOME", "/kg")
+	code, stdout, stderr := runCLI(t, "hook", "zsh")
+	if code != 0 || stderr != "" {
+		t.Fatalf("hook zsh: code %d, stderr %q", code, stderr)
+	}
+	if !strings.Contains(stdout, "__kg_dir='/kg/run'") || strings.Contains(stdout, "@RUN_DIR@") {
+		t.Errorf("the script does not name the run directory:\n%.300s", stdout)
+	}
+
+	for _, args := range [][]string{{"hook"}, {"hook", "zsh", "bash"}, {"hook", "fish"}} {
+		code, stdout, stderr := runCLI(t, args...)
+		if code != 2 || stdout != "" || stderr == "" {
+			t.Errorf("%v: code %d, stdout %q, stderr %q; want a usage error (2) and nothing on stdout", args, code, stdout, stderr)
+		}
+	}
+
+	t.Setenv("KAGEGAMI_HOME", "relative")
+	if code, stdout, _ := runCLI(t, "hook", "zsh"); code == 0 || stdout != "" {
+		t.Errorf("a bad KAGEGAMI_HOME must fail without printing a script: code %d", code)
+	}
+}
