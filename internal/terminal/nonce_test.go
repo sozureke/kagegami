@@ -135,12 +135,12 @@ func TestWriteNonceFileRefusesAnUnsafeDirectory(t *testing.T) {
 		}
 	})
 	t.Run("a symbolic link to a directory", func(t *testing.T) {
-		real := t.TempDir()
-		if err := os.Chmod(real, 0o700); err != nil {
+		target := t.TempDir()
+		if err := os.Chmod(target, 0o700); err != nil {
 			t.Fatal(err)
 		}
 		link := filepath.Join(t.TempDir(), "run")
-		if err := os.Symlink(real, link); err != nil {
+		if err := os.Symlink(target, link); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := WriteNonceFile(link, "%1", testNonce); !errors.Is(err, ErrUnsafeDir) {
