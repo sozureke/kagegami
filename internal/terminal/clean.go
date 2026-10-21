@@ -109,14 +109,14 @@ func (c *Cleaner) Close() error {
 func (c *Cleaner) step(b byte) {
 	switch c.state {
 	case stEsc:
-		switch {
-		case b == '[':
+		switch b {
+		case '[':
 			c.state, c.params, c.csiQ = stCSI, c.params[:0], false
-		case b == ']':
+		case ']':
 			c.state, c.osc = stOSC, oscBody
-		case b == '(' || b == ')' || b == '*' || b == '+' || b == '#' || b == '%':
+		case '(', ')', '*', '+', '#', '%':
 			c.state = stSkip1
-		case b == 0x1b:
+		case 0x1b:
 			// ESC ESC: stay
 		default:
 			c.state = stGround // a two-byte sequence such as ESC = or ESC c

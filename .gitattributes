@@ -5,4 +5,4 @@
 *.bash text eol=lf
 
 # Golden files and recorded tool output must stay byte-exact.
-testdata/** -text
+**/testdata/** -text
