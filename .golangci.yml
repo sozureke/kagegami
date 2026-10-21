@@ -34,6 +34,7 @@ linters:
             - "**/internal/recon/**"
             - "**/internal/pipeline/**"
             - "**/internal/mask/**"
+            - "**/internal/raw/**"
           deny:
             - pkg: github.com/sozureke/kagegami/cmd
               desc: core packages must not import cmd
