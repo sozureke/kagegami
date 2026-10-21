@@ -1,0 +1,63 @@
+{
+  "hosts": [
+    {
+      "ip": "127.0.0.1",
+      "hostname": "localhost",
+      "status": "up"
+    }
+  ],
+  "services": [
+    {
+      "host_ip": "127.0.0.1",
+      "port": 8000,
+      "proto": "tcp",
+      "name": "http-alt",
+      "state": "open"
+    }
+  ],
+  "web_paths": [
+    {
+      "host_ip": "127.0.0.1",
+      "port": 8000,
+      "proto": "tcp",
+      "path": "/admin/",
+      "note": "Possible admin folder"
+    },
+    {
+      "host_ip": "127.0.0.1",
+      "port": 8000,
+      "proto": "tcp",
+      "path": "/admin/index.html",
+      "note": "Possible admin folder"
+    },
+    {
+      "host_ip": "127.0.0.1",
+      "port": 8000,
+      "proto": "tcp",
+      "path": "/login.html",
+      "note": "Possible admin folder"
+    },
+    {
+      "host_ip": "127.0.0.1",
+      "port": 8000,
+      "proto": "tcp",
+      "path": "/robots.txt",
+      "note": "Robots file"
+    },
+    {
+      "host_ip": "127.0.0.1",
+      "port": 8000,
+      "proto": "tcp",
+      "path": "/img/",
+      "note": "Potentially interesting folder"
+    }
+  ],
+  "notes": [
+    {
+      "text": "nmap http-methods 127.0.0.1 8000/tcp: Supported Methods: GET HEAD"
+    },
+    {
+      "text": "nmap http-headers 127.0.0.1 8000/tcp: Server: SimpleHTTP/0.6 Python/3.14.8; Date: Wed, 21 Oct 2026 21:47:53 GMT; Content-type: text/html; Content-Length: 46; Last-Modified: Wed, 21 Oct 2026 21:04:51 GMT; (Request type: HEAD)"
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "hosts": [
+    {
+      "ip": "127.0.0.1",
+      "hostname": "localhost",
+      "os": "Linux",
+      "status": "up"
+    },
+    {
+      "ip": "127.0.0.2",
+      "hostname": "localhost",
+      "os": "Linux",
+      "status": "up"
+    }
+  ],
+  "services": [
+    {
+      "host_ip": "127.0.0.1",
+      "port": 22,
+      "proto": "tcp",
+      "name": "ssh",
+      "version": "OpenSSH 10.5p1 Debian 1 (protocol 2.0)",
+      "state": "open"
+    },
+    {
+      "host_ip": "127.0.0.1",
+      "port": 80,
+      "proto": "tcp",
+      "name": "http",
+      "state": "closed"
+    },
+    {
+      "host_ip": "127.0.0.1",
+      "port": 8000,
+      "proto": "tcp",
+      "name": "http",
+      "version": "SimpleHTTPServer 0.6 (Python 3.14.8)",
+      "state": "open"
+    },
+    {
+      "host_ip": "127.0.0.2",
+      "port": 22,
+      "proto": "tcp",
+      "name": "ssh",
+      "version": "OpenSSH 10.5p1 Debian 1 (protocol 2.0)",
+      "state": "open"
+    },
+    {
+      "host_ip": "127.0.0.2",
+      "port": 80,
+      "proto": "tcp",
+      "name": "http",
+      "state": "closed"
+    },
+    {
+      "host_ip": "127.0.0.2",
+      "port": 8000,
+      "proto": "tcp",
+      "name": "http-alt",
+      "state": "closed"
+    }
+  ],
+  "notes": [
+    {
+      "text": "nmap http-title 127.0.0.1 8000/tcp: Lab"
+    },
+    {
+      "text": "nmap http-server-header 127.0.0.1 8000/tcp: SimpleHTTP/0.6 Python/3.14.8"
+    }
+  ]
+}

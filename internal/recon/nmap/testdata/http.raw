@@ -1,0 +1,24 @@
+Starting Nmap 7.991 ( https://nmap.org ) at 2026-10-21 23:47 +0200
+Nmap scan report for localhost (127.0.0.1)
+Host is up (0.000030s latency).
+
+PORT     STATE SERVICE
+8000/tcp open  http-alt
+| http-methods: 
+|_  Supported Methods: GET HEAD
+| http-enum: 
+|   /admin/: Possible admin folder
+|   /admin/index.html: Possible admin folder
+|   /login.html: Possible admin folder
+|   /robots.txt: Robots file
+|_  /img/: Potentially interesting folder
+| http-headers: 
+|   Server: SimpleHTTP/0.6 Python/3.14.8
+|   Date: Wed, 21 Oct 2026 21:47:53 GMT
+|   Content-type: text/html
+|   Content-Length: 46
+|   Last-Modified: Wed, 21 Oct 2026 21:04:51 GMT
+|   
+|_  (Request type: HEAD)
+
+Nmap done: 1 IP address (1 host up) scanned in 2.31 seconds

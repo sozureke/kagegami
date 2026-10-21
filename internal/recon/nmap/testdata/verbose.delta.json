@@ -1,0 +1,37 @@
+{
+  "hosts": [
+    {
+      "ip": "127.0.0.1",
+      "hostname": "localhost",
+      "status": "up"
+    }
+  ],
+  "services": [
+    {
+      "host_ip": "127.0.0.1",
+      "port": 22,
+      "proto": "tcp",
+      "name": "ssh",
+      "state": "open"
+    },
+    {
+      "host_ip": "127.0.0.1",
+      "port": 8000,
+      "proto": "tcp",
+      "name": "http",
+      "version": "SimpleHTTPServer 0.6 (Python 3.14.8)",
+      "state": "open"
+    }
+  ],
+  "notes": [
+    {
+      "text": "nmap http-title 127.0.0.1 8000/tcp: Lab"
+    },
+    {
+      "text": "nmap http-methods 127.0.0.1 8000/tcp: Supported Methods: GET HEAD"
+    },
+    {
+      "text": "nmap http-server-header 127.0.0.1 8000/tcp: SimpleHTTP/0.6 Python/3.14.8"
+    }
+  ]
+}
