@@ -53,10 +53,7 @@ func WriteNonceFile(runDir string, pane tmux.PaneID, nonce string) (*NonceFile, 
 	if _, err := tmux.ParsePaneID(string(pane)); err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(runDir, 0o700); err != nil {
-		return nil, fmt.Errorf("create the run directory: %w", err)
-	}
-	if err := checkPrivateDir(runDir); err != nil {
+	if err := prepareRunDir(runDir); err != nil {
 		return nil, err
 	}
 
@@ -89,6 +86,14 @@ func (f *NonceFile) Remove() error {
 		return fmt.Errorf("remove the nonce file: %w", err)
 	}
 	return nil
+}
+
+// prepareRunDir creates the run directory if needed and checks that only the user can reach it.
+func prepareRunDir(dir string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("create the run directory: %w", err)
+	}
+	return checkPrivateDir(dir)
 }
 
 func checkPrivateDir(dir string) error {
