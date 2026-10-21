@@ -114,7 +114,7 @@ func TestUpsertHostNewValuesReplaceOldOnes(t *testing.T) {
 func TestUpsertHostSourceBlobFollowsTheLatestScan(t *testing.T) {
 	s, r, _ := newRepo(t)
 	for _, id := range []int64{1, 2} {
-		mustExec(t, s, "INSERT INTO output_blob (id, cmd, path, started_at) VALUES (?, 'nmap', 'p', 1)", id)
+		mustExec(t, s, "INSERT INTO output_blob (id, cmd, started_at) VALUES (?, 'nmap', 1)", id)
 	}
 
 	h := mustHost(t, r, Host{IP: "10.0.0.1", SourceBlobID: ptr(int64(1))})
