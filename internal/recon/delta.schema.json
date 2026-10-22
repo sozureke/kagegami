@@ -1,0 +1,77 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "hosts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "ip": {"type": "string"},
+          "hostname": {"type": "string"},
+          "os": {"type": "string"},
+          "status": {"type": "string", "enum": ["up", "down"]}
+        },
+        "required": ["ip"]
+      }
+    },
+    "services": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "host_ip": {"type": "string"},
+          "port": {"type": "integer"},
+          "proto": {"type": "string", "enum": ["tcp", "udp"]},
+          "name": {"type": "string"},
+          "version": {"type": "string"},
+          "state": {"type": "string", "enum": ["open", "closed", "filtered", "open|filtered", "closed|filtered", "unfiltered"]}
+        },
+        "required": ["host_ip", "port", "proto"]
+      }
+    },
+    "web_paths": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "host_ip": {"type": "string"},
+          "host": {"type": "string"},
+          "port": {"type": "integer"},
+          "proto": {"type": "string", "enum": ["tcp", "udp"]},
+          "path": {"type": "string"},
+          "status_code": {"type": "integer"},
+          "note": {"type": "string"}
+        },
+        "required": ["port", "proto", "path"]
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "severity": {"type": "string", "enum": ["info", "low", "medium", "high", "critical"]},
+          "title": {"type": "string"},
+          "description": {"type": "string"}
+        },
+        "required": ["severity", "title"]
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "text": {"type": "string"}
+        },
+        "required": ["text"]
+      }
+    }
+  }
+}

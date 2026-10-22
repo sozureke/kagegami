@@ -225,3 +225,76 @@ func TestWebPathHostByNameOrAddress(t *testing.T) {
 		}
 	}
 }
+
+func TestSanitizeDropsOnlyTheBadEntries(t *testing.T) {
+	d := StateDelta{
+		Hosts:    []HostDelta{{IP: " 10.0.0.1 "}, {IP: "[::]"}, {IP: ""}},
+		Services: []ServiceDelta{{HostIP: "10.0.0.1", Port: 22, Proto: "TCP"}, {HostIP: "10.0.0.1", Port: 0, Proto: "tcp"}},
+		WebPaths: []WebPathDelta{{HostIP: "10.0.0.1", Port: 80, Proto: "tcp", Path: ""}, {HostIP: "10.0.0.1", Port: 80, Proto: "tcp", Path: "/a"}},
+		Findings: []FindingDelta{{Severity: "nope", Title: "x"}, {Severity: "low", Title: "ok"}},
+		Notes:    []NoteDelta{{Text: " "}, {Text: "n"}},
+	}
+	got, dropped := d.Sanitize()
+	if len(got.Hosts) != 1 || got.Hosts[0].IP != "10.0.0.1" || len(got.Services) != 1 || got.Services[0].Proto != "tcp" || len(got.WebPaths) != 1 || len(got.Findings) != 1 || len(got.Notes) != 1 {
+		t.Errorf("kept = %+v", got)
+	}
+	if len(dropped) != 6 {
+		t.Errorf("dropped = %v", dropped)
+	}
+	for _, dr := range dropped {
+		if dr.Kind != Malformed {
+			t.Errorf("%v: expected malformed", dr)
+		}
+	}
+	if len(d.Hosts) != 3 || d.Hosts[0].IP != " 10.0.0.1 " {
+		t.Error("Sanitize changed its receiver")
+	}
+	if _, dropped := (StateDelta{}).Sanitize(); len(dropped) != 0 {
+		t.Errorf("dropped = %v", dropped)
+	}
+}
+
+func TestParseDeltaLenient(t *testing.T) {
+	d, dropped, err := ParseDeltaLenient([]byte(`{"hosts":[{"ip":"10.0.0.1"},{"ip":"junk"}],"services":[{"host_ip":"10.0.0.1","port":22,"proto":"tcp"}]}`))
+	if err != nil || len(d.Hosts) != 1 || len(d.Services) != 1 || len(dropped) != 1 {
+		t.Errorf("%+v, %v, %v", d, dropped, err)
+	}
+	for _, doc := range []string{`{"hosts":[`, `{"credentials":[]}`, `{} x`, `[]`, ``, `{"hosts":[{"ip":"10.0.0.1","password":"x"}]}`} {
+		if _, _, err := ParseDeltaLenient([]byte(doc)); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%q: err = %v, want ErrInvalid", doc, err)
+		}
+	}
+	var big StateDelta
+	for range MaxEntries + 1 {
+		big.Notes = append(big.Notes, NoteDelta{Text: "x"})
+	}
+	data, _ := json.Marshal(big)
+	if _, _, err := ParseDeltaLenient(data); !errors.Is(err, ErrInvalid) {
+		t.Errorf("too many entries: %v", err)
+	}
+}
+
+func TestSanitizeTellsAWildcardFromANonsense(t *testing.T) {
+	d := StateDelta{Hosts: []HostDelta{{IP: "0.0.0.0"}, {IP: "::"}, {IP: "[::]"}, {IP: "224.0.0.251"}, {IP: "ff02::1"}, {IP: "255.255.255.255"}, {IP: "::ffff:0.0.0.0"}, {IP: "10.0.0.1"}}}
+	got, dropped := d.Sanitize()
+	if len(got.Hosts) != 1 || got.Hosts[0].IP != "10.0.0.1" {
+		t.Errorf("hosts = %+v", got.Hosts)
+	}
+	kinds := map[DropKind]int{}
+	for _, dr := range dropped {
+		kinds[dr.Kind]++
+	}
+	if kinds[NotAHost] != 6 || kinds[Malformed] != 1 {
+		t.Errorf("kinds = %v (%v)", kinds, dropped)
+	}
+	// a service on a wildcard address is dropped as well
+	if _, dropped := (StateDelta{Services: []ServiceDelta{{HostIP: "0.0.0.0", Port: 22, Proto: "tcp"}}}).Sanitize(); len(dropped) != 1 || dropped[0].Kind != NotAHost {
+		t.Errorf("dropped = %v", dropped)
+	}
+	if _, err := (StateDelta{Hosts: []HostDelta{{IP: "0.0.0.0"}}}).Validate(); !errors.Is(err, ErrInvalid) {
+		t.Errorf("Validate must refuse a wildcard host too: %v", err)
+	}
+	if got := (Drop{Kind: Ungrounded, Detail: "x"}).String(); got != "ungrounded: x" {
+		t.Errorf("String = %q", got)
+	}
+}

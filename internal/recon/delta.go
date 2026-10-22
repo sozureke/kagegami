@@ -89,6 +89,10 @@ var (
 // ErrInvalid is wrapped by every validation error.
 var ErrInvalid = errors.New("invalid state delta")
 
+// errNotAHost marks an address that is well formed but cannot be the address of a host that
+// is tested: the wildcard 0.0.0.0 and ::, multicast, the broadcast address.
+var errNotAHost = errors.New("not the address of a host")
+
 // IsEmpty reports whether the delta changes nothing.
 func (d StateDelta) IsEmpty() bool {
 	return len(d.Hosts)+len(d.Services)+len(d.WebPaths)+len(d.Findings)+len(d.Notes) == 0
@@ -216,7 +220,11 @@ func address(s string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("address %q is not an IP address", truncate(s))
 	}
-	return addr.Unmap().String(), nil
+	addr = addr.Unmap()
+	if addr.IsUnspecified() || addr.IsMulticast() || addr == netip.AddrFrom4([4]byte{255, 255, 255, 255}) {
+		return "", fmt.Errorf("%w: %s", errNotAHost, addr)
+	}
+	return addr.String(), nil
 }
 
 func truncate(s string) string {
@@ -283,4 +291,86 @@ func firstError(errs ...error) error {
 		}
 	}
 	return nil
+}
+
+// DropKind says why an entry of a delta was left out. The kinds are different things: an entry
+// that is not well formed is noise, one that is well formed but is not what is wanted is a
+// decision, and some (an address outside the scope) are worth telling the person about.
+type DropKind string
+
+// The reasons an entry is dropped.
+const (
+	// Malformed: the entry is not valid (an empty path, a port out of range, a word where an address belongs).
+	Malformed DropKind = "malformed"
+	// NotAHost: the address is well formed but is not a host (0.0.0.0, ::, multicast, broadcast).
+	NotAHost DropKind = "not a host"
+	// Ungrounded: nothing in the command or the output supports the entry.
+	Ungrounded DropKind = "ungrounded"
+	// OutOfScope: the address is not one that the engagement tests.
+	OutOfScope DropKind = "outside the scope"
+	// Policy: the source may not provide this kind of entry (findings from a model).
+	Policy DropKind = "not allowed from this source"
+)
+
+// Drop is one entry that was left out of a delta.
+type Drop struct {
+	Kind   DropKind
+	Detail string
+}
+
+func (d Drop) String() string { return string(d.Kind) + ": " + d.Detail }
+
+// Sanitize keeps the entries of the delta that are valid and reports the others. A delta from a
+// model is not rejected as a whole for one bad line: models fill a list with an empty entry, or
+// write an address that is not one. Each entry is checked alone and normalized.
+func (d StateDelta) Sanitize() (StateDelta, []Drop) {
+	var out StateDelta
+	var dropped []Drop
+	keep := func(kind string, i int, single StateDelta, add func(StateDelta)) {
+		checked, err := single.Validate()
+		if err != nil {
+			k := Malformed
+			if errors.Is(err, errNotAHost) {
+				k = NotAHost
+			}
+			dropped = append(dropped, Drop{Kind: k, Detail: fmt.Sprintf("%s %d: %v", kind, i, err)})
+			return
+		}
+		add(checked)
+	}
+	for i, h := range d.Hosts {
+		keep("host", i, StateDelta{Hosts: []HostDelta{h}}, func(c StateDelta) { out.Hosts = append(out.Hosts, c.Hosts...) })
+	}
+	for i, s := range d.Services {
+		keep("service", i, StateDelta{Services: []ServiceDelta{s}}, func(c StateDelta) { out.Services = append(out.Services, c.Services...) })
+	}
+	for i, w := range d.WebPaths {
+		keep("web path", i, StateDelta{WebPaths: []WebPathDelta{w}}, func(c StateDelta) { out.WebPaths = append(out.WebPaths, c.WebPaths...) })
+	}
+	for i, f := range d.Findings {
+		keep("finding", i, StateDelta{Findings: []FindingDelta{f}}, func(c StateDelta) { out.Findings = append(out.Findings, c.Findings...) })
+	}
+	for i, n := range d.Notes {
+		keep("note", i, StateDelta{Notes: []NoteDelta{n}}, func(c StateDelta) { out.Notes = append(out.Notes, c.Notes...) })
+	}
+	return out, dropped
+}
+
+// ParseDeltaLenient reads a delta from JSON like ParseDelta (unknown fields, text after the value
+// and broken JSON are errors) but drops invalid entries instead of failing, and says which.
+func ParseDeltaLenient(data []byte) (StateDelta, []Drop, error) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	var d StateDelta
+	if err := dec.Decode(&d); err != nil {
+		return StateDelta{}, nil, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
+		return StateDelta{}, nil, fmt.Errorf("%w: text after the JSON value", ErrInvalid)
+	}
+	if n := len(d.Hosts) + len(d.Services) + len(d.WebPaths) + len(d.Findings) + len(d.Notes); n > MaxEntries {
+		return StateDelta{}, nil, fmt.Errorf("%w: %d entries, the limit is %d", ErrInvalid, n, MaxEntries)
+	}
+	out, dropped := d.Sanitize()
+	return out, dropped, nil
 }
