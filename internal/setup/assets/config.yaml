@@ -2,9 +2,22 @@
 # the default shown here. Unknown keys are an error, so typos are caught early.
 
 model:
-  tier1: ollama/llama3.1:8b # cheap state extractor, runs on every interesting command
-  tier2: ollama/qwen2.5:14b # reasoning model for `next` and `pipeline`
+  # You choose the models. Write them as provider/model; for now the provider is "ollama",
+  # and the model is any you have pulled (see `ollama list`).
+  #
+  # tier1 reads the output of commands that Kagegami has no parser for and puts what it finds
+  # (hosts, ports, paths) on the map. The task is narrow, so a small, fast model is enough.
+  tier1: ollama/llama3.1:8b
+  # tier2 answers `next` and `pipeline`: it reasons over the whole map. Leave it empty to let
+  # tier1 do both, or name a larger model for better advice, for example ollama/qwen2.5:14b.
+  tier2: ""
   cloud_fallback: false
+
+providers:
+  ollama:
+    # Where Ollama runs. The default is this machine. Command output is sent to this address,
+    # so any other address counts as remote and its data is masked like data sent to a cloud.
+    base_url: http://localhost:11434
 
 privacy:
   mask_credentials: true # credentials and hashes become ••• before anything leaves your machine
