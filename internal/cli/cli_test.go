@@ -433,3 +433,13 @@ func TestNextAndPipelineFlags(t *testing.T) {
 		t.Errorf("a negative --show was accepted: code %d", code)
 	}
 }
+
+func TestWatchDemoNeedsATerminal(t *testing.T) {
+	code, stdout, stderr := runCLI(t, "watch", "--demo", "--no-anim")
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "needs a terminal") {
+		t.Errorf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	if code, _, stderr := runCLI(t, "watch"); code != 1 || !strings.Contains(stderr, "--demo") {
+		t.Errorf("without --demo the error must point to it: code=%d stderr=%q", code, stderr)
+	}
+}
