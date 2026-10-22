@@ -55,7 +55,11 @@ type Outcome struct {
 	Answer string
 	// Attempts are all the answers the model gave.
 	Attempts []string
-	Checks   []CheckResult
+	// Claims and AttemptClaims are what the answer, and each attempt, put forward as commands or
+	// as facts for the map, without the words around them (see InClaims).
+	Claims        string
+	AttemptClaims []string
+	Checks        []CheckResult
 
 	Tokens   int
 	Duration time.Duration
@@ -228,6 +232,7 @@ func runTier2(ctx context.Context, cfg Config, f Fixture, mode, variant string, 
 		if runErr == nil {
 			s := res.Suggestion
 			o.Answer = strings.Join([]string{s.Command, s.Rationale, s.Expected}, "\n")
+			o.Claims = s.Command
 			o.Tokens, o.ReadCalls = res.Usage.Total(), res.ReadOutputCalls
 		}
 	case ModePipeline:
@@ -235,6 +240,7 @@ func runTier2(ctx context.Context, cfg Config, f Fixture, mode, variant string, 
 		res, runErr = t.Plan(ctx, requestOr(f.Request, "Lay out a pipeline for this target."))
 		if runErr == nil {
 			o.Answer = planText(res)
+			o.Claims = planCommands(res)
 			o.Tokens, o.ReadCalls = res.Usage.Total(), res.ReadOutputCalls
 			for _, d := range res.Dropped {
 				o.Dropped = append(o.Dropped, d.String())
@@ -245,7 +251,8 @@ func runTier2(ctx context.Context, cfg Config, f Fixture, mode, variant string, 
 	}
 	o.Duration = time.Since(start).Round(100 * time.Millisecond)
 	o.finish(runErr, rec)
-	o.Checks = evaluate(f.Checks, texts{answer: o.Answer, attempts: o.Attempts, requests: rec.requests})
+	o.AttemptClaims = mapStrings(o.Attempts, tier2Claims)
+	o.Checks = evaluate(f.Checks, texts{answer: o.Answer, attempts: o.Attempts, requests: rec.requests, claims: o.Claims, attemptClaims: o.AttemptClaims})
 	return o
 }
 
@@ -270,6 +277,7 @@ func runTier1(ctx context.Context, cfg Config, c Tier1Case, variant string, run 
 			runErr = err
 		} else {
 			o.Answer = string(data)
+			o.Claims = tier1Claims(res.Delta)
 		}
 		o.Tokens = res.Usage.Total()
 		for _, d := range res.Dropped {
@@ -277,7 +285,8 @@ func runTier1(ctx context.Context, cfg Config, c Tier1Case, variant string, run 
 		}
 	}
 	o.finish(runErr, rec)
-	o.Checks = evaluate(c.Checks, texts{answer: o.Answer, attempts: o.Attempts, requests: rec.requests})
+	o.AttemptClaims = mapStrings(o.Attempts, tier1AttemptClaims)
+	o.Checks = evaluate(c.Checks, texts{answer: o.Answer, attempts: o.Attempts, requests: rec.requests, claims: o.Claims, attemptClaims: o.AttemptClaims})
 	return o
 }
 
@@ -317,4 +326,20 @@ func planText(res agent.PlanResult) string {
 		fmt.Fprintf(&b, "\n%d. %s | %s | %s | %s", s.Priority, s.Service, s.Vector, s.Why, strings.Join(s.Commands, " ; "))
 	}
 	return b.String()
+}
+
+func planCommands(res agent.PlanResult) string {
+	var cmds []string
+	for _, s := range res.Pipeline.Steps {
+		cmds = append(cmds, s.Commands...)
+	}
+	return strings.Join(cmds, "\n")
+}
+
+func mapStrings(in []string, f func(string) string) []string {
+	out := make([]string, len(in))
+	for i, s := range in {
+		out[i] = f(s)
+	}
+	return out
 }

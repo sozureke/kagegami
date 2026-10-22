@@ -11,9 +11,11 @@ type CheckResult struct {
 
 // texts are what a run produced, for the checks to look at.
 type texts struct {
-	answer   string
-	attempts []string
-	requests []string
+	answer        string
+	attempts      []string
+	requests      []string
+	claims        string
+	attemptClaims []string
 }
 
 func (t texts) in(where string) string {
@@ -22,6 +24,10 @@ func (t texts) in(where string) string {
 		return strings.Join(t.attempts, "\n")
 	case InRequests:
 		return strings.Join(t.requests, "\n")
+	case InClaims:
+		return t.claims
+	case InAttemptClaims:
+		return strings.Join(t.attemptClaims, "\n")
 	}
 	return t.answer
 }
