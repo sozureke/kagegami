@@ -203,6 +203,7 @@ func TestRemoteIsToldByTheAddress(t *testing.T) {
 	} {
 		cfg := config.Default()
 		cfg.Providers.Ollama.BaseURL = url
+		cfg.Model.CloudFallback = true // this test is about Remote, not about the gate M6.8 adds; see TestCloudFallbackGate
 		set, err := Build(bg, cfg, Options{Registry: registry(t, fakes()), Resolver: names})
 		if err != nil || set.Remote != want {
 			t.Errorf("%s: remote = %v, %v; want %v", url, set != nil && set.Remote, err, want)
@@ -211,6 +212,7 @@ func TestRemoteIsToldByTheAddress(t *testing.T) {
 	t.Run("a model that is not Ollama is remote", func(t *testing.T) {
 		cfg := config.Default()
 		cfg.Model.Tier2 = "anthropic/claude-x"
+		cfg.Model.CloudFallback = true
 		reg := registry(t, fakes())
 		_ = reg.Register("anthropic", func(string, llm.Options) (llm.Provider, error) { return llmtest.NewFake(), nil })
 		set, err := Build(bg, cfg, Options{Registry: reg, Resolver: names})
@@ -220,9 +222,72 @@ func TestRemoteIsToldByTheAddress(t *testing.T) {
 	})
 }
 
+// M6.8: with cloud_fallback false (the default), no code path can reach a provider that is not
+// on this machine. Build refuses to even construct one.
+func TestCloudFallbackGate(t *testing.T) {
+	names := func(_ context.Context, host string) ([]netip.Addr, error) {
+		if host == "localhost" {
+			return []netip.Addr{netip.MustParseAddr("127.0.0.1")}, nil
+		}
+		return nil, errors.New("no such host")
+	}
+	fakes := func() map[string]*llmtest.Fake { return map[string]*llmtest.Fake{"llama3.1:8b": llmtest.NewFake()} }
+
+	t.Run("a remote Ollama is refused by default", func(t *testing.T) {
+		cfg := config.Default()
+		cfg.Providers.Ollama.BaseURL = "http://192.168.64.1:11434"
+		_, err := Build(bg, cfg, Options{Registry: registry(t, fakes()), Resolver: names})
+		if !errors.Is(err, ErrCloudFallbackOff) || !strings.Contains(err.Error(), "model.tier1") {
+			t.Errorf("err = %v", err)
+		}
+	})
+	t.Run("a cloud provider is refused by default", func(t *testing.T) {
+		cfg := config.Default()
+		cfg.Model.Tier2 = "anthropic/claude-x"
+		reg := registry(t, fakes())
+		called := false
+		_ = reg.Register("anthropic", func(string, llm.Options) (llm.Provider, error) { called = true; return llmtest.NewFake(), nil })
+		_, err := Build(bg, cfg, Options{Registry: reg, Resolver: names})
+		if !errors.Is(err, ErrCloudFallbackOff) || !strings.Contains(err.Error(), "model.tier2") {
+			t.Errorf("err = %v", err)
+		}
+		if called {
+			t.Error("the cloud provider's factory ran although cloud_fallback is false: it must never even be constructed")
+		}
+	})
+	t.Run("a local Ollama is never gated, cloud_fallback false or not", func(t *testing.T) {
+		for _, cloud := range []bool{false, true} {
+			cfg := config.Default()
+			cfg.Model.CloudFallback = cloud
+			if _, err := Build(bg, cfg, Options{Registry: registry(t, fakes()), Resolver: names}); err != nil {
+				t.Errorf("cloud_fallback=%v: err = %v", cloud, err)
+			}
+		}
+	})
+	t.Run("cloud_fallback true allows a remote model", func(t *testing.T) {
+		cfg := config.Default()
+		cfg.Providers.Ollama.BaseURL = "http://192.168.64.1:11434"
+		cfg.Model.CloudFallback = true
+		set, err := Build(bg, cfg, Options{Registry: registry(t, fakes()), Resolver: names})
+		if err != nil || !set.Remote {
+			t.Errorf("set = %+v, err = %v", set, err)
+		}
+	})
+	t.Run("one tier remote and gated stops the whole build, even if the other tier is local", func(t *testing.T) {
+		cfg := config.Default()
+		cfg.Model.Tier2 = "anthropic/claude-x"
+		reg := registry(t, fakes())
+		_ = reg.Register("anthropic", func(string, llm.Options) (llm.Provider, error) { return llmtest.NewFake(), nil })
+		if _, err := Build(bg, cfg, Options{Registry: reg, Resolver: names}); !errors.Is(err, ErrCloudFallbackOff) {
+			t.Errorf("err = %v", err)
+		}
+	})
+}
+
 func TestBuildNamesTheSettingThatIsWrong(t *testing.T) {
 	cfg := config.Default()
 	cfg.Model.Tier2 = "mistral/large"
+	cfg.Model.CloudFallback = true // past the gate M6.8 adds, to reach the "no such provider" error below
 	_, err := Build(bg, cfg, Options{})
 	if err == nil || !strings.Contains(err.Error(), "model.tier2") || !strings.Contains(err.Error(), `"mistral"`) || !strings.Contains(err.Error(), "ollama") {
 		t.Errorf("err = %v", err)

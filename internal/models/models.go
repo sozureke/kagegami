@@ -20,6 +20,11 @@ const (
 	Tier2 = "tier2"
 )
 
+// ErrCloudFallbackOff is returned when a tier's model is not on this machine and
+// model.cloud_fallback is false. It is never possible to reach such a provider with the
+// setting off: Build refuses to even construct it (M6.8).
+var ErrCloudFallbackOff = errors.New("the model is not on this machine and model.cloud_fallback is false")
+
 // Options adjust Build; the zero value is right for normal use.
 type Options struct {
 	// Record is told about every call to a model: which tier, which model, what it cost, whether
@@ -70,6 +75,9 @@ func Build(ctx context.Context, cfg config.Config, o Options) (*Set, error) {
 		remote, err := isRemote(ctx, cfg, parsed.Provider, o.Resolver)
 		if err != nil {
 			return nil, err
+		}
+		if remote && !cfg.Model.CloudFallback {
+			return nil, fmt.Errorf("model.%s: %w (%s): set model.cloud_fallback: true in the config to allow it", tier, ErrCloudFallbackOff, spec)
 		}
 		set.Remote = set.Remote || remote
 		p, err := reg.New(spec, llm.Options{BaseURL: baseURL(cfg, parsed.Provider)})

@@ -20,6 +20,29 @@ commands:
       pane, and does nothing otherwise.
   next:
     short: Suggest the next recon step
+    long: |-
+      Ask the model that reasons over the whole map (tier 2, model.tier2 in the config) for
+      one recon command, with why it matters, what to expect and its risk.
+
+          kagegami next
+          kagegami next "focus on the web server"
+
+      The command is checked against the case's scope before it is shown: it never names an
+      address outside it, and it is never run for you. The case needs a scope first (see
+      kagegami case set). --json prints the suggestion as JSON.
+  pipeline:
+    short: Lay out a pipeline for the whole target
+    long: |-
+      Ask tier 2 to read the whole map and order what is worth doing next, with why each
+      step matters. Every run is saved as a new, numbered version.
+
+          kagegami pipeline
+          kagegami pipeline --history
+          kagegami pipeline --show 3
+
+      A step about a service that is not on the map, or a command outside the case's
+      scope, is left out and listed as dropped, not shown to the model again. --json prints
+      the pipeline (or, with --history/--show, the saved runs) as JSON.
   report:
     short: Generate the Markdown report
   map:

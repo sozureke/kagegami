@@ -1,0 +1,4 @@
+host 10.10.10.5 name=web.htb Linux up
+  22/tcp ssh OpenSSH 8.9p1 Ubuntu
+  80/tcp http Apache/2.4.41
+    paths: /admin 403, /index.html 200
