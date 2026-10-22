@@ -31,5 +31,27 @@ commands:
       Closed ports, long path lists and old notes are folded; --all shows everything.
       --stats adds the tokens the models have used. --json prints the whole map as JSON.
       The command only reads the case.
+  case:
+    short: Set or show what a case is about (target, goal, scope)
+    long: |-
+      A case remembers what the engagement is about. The scope in it is the boundary of
+      everything Kagegami does: addresses outside it are kept off the map, and next and
+      pipeline only suggest what is inside it.
+  case set:
+    short: Set the target, goal, scope, rules or phase of a case
+    long: |-
+      Change what a case is about; what you do not give stays as it is.
+
+      The scope says what may be touched. Give an address, a network or a range, and repeat
+      the flag for more than one:
+
+          kagegami case set --target 10.10.10.5 --goal "user and root flag"
+          kagegami case set --scope 10.10.10.0/24 --scope 10.10.20.5-10.10.20.9
+          kagegami case set --add-scope 192.168.1.50
+
+      --scope replaces the scope, --add-scope adds to it. If the scope is empty and the
+      target is an address or a network, the scope becomes the target.
+  case show:
+    short: Show what a case is about
   version:
     short: Print version information
