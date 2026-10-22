@@ -71,33 +71,40 @@ func newMapCmd() *cobra.Command {
 // caseDatabase finds the database of a case that exists. It never creates one: a misspelled
 // case name must not leave an empty case behind.
 func caseDatabase(p config.Paths, name string) (string, error) {
+	_, db, err := resolveCase(p, name)
+	return db, err
+}
+
+// resolveCase finds the case the person means and the database of it. With no name it takes the
+// only case there is.
+func resolveCase(p config.Paths, name string) (caseName, db string, err error) {
 	if name == "" {
 		cases, err := listCases(p)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 		switch len(cases) {
 		case 0:
-			return "", fmt.Errorf("there is no case yet: create one with 'kagegami init --case NAME'")
+			return "", "", fmt.Errorf("there is no case yet: create one with 'kagegami init --case NAME'")
 		case 1:
 			name = cases[0]
 		default:
-			return "", newUsageError("there are several cases (%s): choose one with --case", strings.Join(cases, ", "))
+			return "", "", newUsageError("there are several cases (%s): choose one with --case", strings.Join(cases, ", "))
 		}
 	}
 	dir, err := p.CaseDir(name)
 	if errors.Is(err, config.ErrInvalidCaseName) {
-		return "", &usageError{err: err}
+		return "", "", &usageError{err: err}
 	}
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	db := filepath.Join(dir, store.FileName)
+	db = filepath.Join(dir, store.FileName)
 	info, err := os.Stat(db)
 	if err != nil || !info.Mode().IsRegular() {
-		return "", fmt.Errorf("there is no case %q: create it with 'kagegami init --case %s'", name, name)
+		return "", "", fmt.Errorf("there is no case %q: create it with 'kagegami init --case %s'", name, name)
 	}
-	return db, nil
+	return name, db, nil
 }
 
 // listCases returns the names of the cases that have a database, sorted.

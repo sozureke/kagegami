@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/sozureke/kagegami/internal/pipeline"
 	"github.com/sozureke/kagegami/internal/recon"
 	"github.com/sozureke/kagegami/internal/secret"
@@ -97,12 +99,18 @@ func TestHelpTextMatchesCommands(t *testing.T) {
 	root := newRootCmd(io.Discard, io.Discard, testInfo)
 
 	registered := map[string]bool{}
-	for _, cmd := range root.Commands() {
-		registered[cmd.Name()] = true
-		if cmd.Short == "" {
-			t.Errorf("command %q has no short description in help.yaml", cmd.Name())
+	var walk func(prefix string, cmds []*cobra.Command)
+	walk = func(prefix string, cmds []*cobra.Command) {
+		for _, cmd := range cmds {
+			name := prefix + cmd.Name()
+			registered[name] = true
+			if cmd.Short == "" {
+				t.Errorf("command %q has no short description in help.yaml", name)
+			}
+			walk(name+" ", cmd.Commands())
 		}
 	}
+	walk("", root.Commands())
 	for name := range help.Commands {
 		if !registered[name] {
 			t.Errorf("help.yaml describes %q, but there is no such command", name)
@@ -257,4 +265,77 @@ func TestMapStats(t *testing.T) {
 	if _, stdout, _ := runCLI(t, "map"); strings.Contains(stdout, "tokens") {
 		t.Errorf("--stats is off by default:\n%s", stdout)
 	}
+}
+
+func TestCaseSetAndShow(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("KAGEGAMI_HOME", home)
+	if code, _, stderr := runCLI(t, "init", "--case", "box"); code != 0 {
+		t.Fatalf("init: %d %s", code, stderr)
+	}
+
+	t.Run("nothing set yet", func(t *testing.T) {
+		code, out, _ := runCLI(t, "case", "show")
+		if code != 0 || !strings.Contains(out, "No scope is set") || !strings.Contains(out, "kagegami case set --scope") {
+			t.Errorf("code %d:\n%s", code, out)
+		}
+	})
+	t.Run("a target alone sets the scope too, and says so", func(t *testing.T) {
+		code, out, _ := runCLI(t, "case", "set", "--target", "10.10.10.5", "--goal", "user and root")
+		if code != 0 || !strings.Contains(out, "scope    10.10.10.5") || !strings.Contains(out, "it is now the target") {
+			t.Errorf("code %d:\n%s", code, out)
+		}
+	})
+	t.Run("the scope flag repeats and replaces", func(t *testing.T) {
+		code, out, _ := runCLI(t, "case", "set", "--scope", "10.10.10.0/24", "--scope", "10.10.20.5-10.10.20.9")
+		if code != 0 || !strings.Contains(out, "10.10.10.0/24, 10.10.20.5-10.10.20.9") || strings.Contains(out, "it is now the target") {
+			t.Errorf("code %d:\n%s", code, out)
+		}
+		_, out, _ = runCLI(t, "case", "set", "--add-scope", "192.168.1.50")
+		if !strings.Contains(out, "10.10.10.0/24, 10.10.20.5-10.10.20.9, 192.168.1.50") || !strings.Contains(out, "user and root") {
+			t.Errorf("--add-scope:\n%s", out)
+		}
+	})
+	t.Run("json", func(t *testing.T) {
+		code, out, _ := runCLI(t, "case", "show", "--json")
+		var v struct {
+			Case   string   `json:"case"`
+			Target string   `json:"target"`
+			Scope  []string `json:"scope"`
+			Phase  string   `json:"phase"`
+		}
+		if code != 0 || json.Unmarshal([]byte(out), &v) != nil || v.Case != "box" || v.Target != "10.10.10.5" || len(v.Scope) != 3 || v.Phase != "recon" {
+			t.Errorf("code %d, %+v\n%s", code, v, out)
+		}
+	})
+	t.Run("mistakes are usage errors and change nothing", func(t *testing.T) {
+		for _, args := range [][]string{
+			{"case", "set"},
+			{"case", "set", "--scope", "0.0.0.0/0"},
+			{"case", "set", "--scope", "box.htb"},
+			{"case", "set", "--phase", "Bad Phase"},
+			{"case", "set", "--target", ""},
+			{"case", "set", "--case", "../x", "--goal", "g"},
+			{"case", "show", "extra"},
+			{"case", "bogus"},
+		} {
+			if code, out, stderr := runCLI(t, args...); code != 2 || out != "" || stderr == "" {
+				t.Errorf("%v: code %d, stdout %q, stderr %q", args, code, out, stderr)
+			}
+		}
+		_, out, _ := runCLI(t, "case", "show")
+		if !strings.Contains(out, "10.10.10.0/24, 10.10.20.5-10.10.20.9, 192.168.1.50") {
+			t.Errorf("a refused change altered the scope:\n%s", out)
+		}
+	})
+	t.Run("a case that does not exist", func(t *testing.T) {
+		if code, _, stderr := runCLI(t, "case", "set", "--case", "nope", "--goal", "g"); code != 1 || !strings.Contains(stderr, `no case "nope"`) {
+			t.Errorf("code %d, stderr %q", code, stderr)
+		}
+	})
+	t.Run("the case command alone shows its help", func(t *testing.T) {
+		if code, out, _ := runCLI(t, "case"); code != 0 || !strings.Contains(out, "set") || !strings.Contains(out, "show") {
+			t.Errorf("code %d:\n%s", code, out)
+		}
+	})
 }

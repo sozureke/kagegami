@@ -275,7 +275,7 @@ func TestParseDeltaLenient(t *testing.T) {
 }
 
 func TestSanitizeTellsAWildcardFromANonsense(t *testing.T) {
-	d := StateDelta{Hosts: []HostDelta{{IP: "0.0.0.0"}, {IP: "::"}, {IP: "[::]"}, {IP: "224.0.0.251"}, {IP: "ff02::1"}, {IP: "255.255.255.255"}, {IP: "::ffff:0.0.0.0"}, {IP: "10.0.0.1"}}}
+	d := StateDelta{Hosts: []HostDelta{{IP: "::%0"}, {IP: "0.0.0.0"}, {IP: "::"}, {IP: "[::]"}, {IP: "224.0.0.251"}, {IP: "ff02::1"}, {IP: "255.255.255.255"}, {IP: "::ffff:0.0.0.0"}, {IP: "10.0.0.1"}}}
 	got, dropped := d.Sanitize()
 	if len(got.Hosts) != 1 || got.Hosts[0].IP != "10.0.0.1" {
 		t.Errorf("hosts = %+v", got.Hosts)
@@ -284,7 +284,7 @@ func TestSanitizeTellsAWildcardFromANonsense(t *testing.T) {
 	for _, dr := range dropped {
 		kinds[dr.Kind]++
 	}
-	if kinds[NotAHost] != 6 || kinds[Malformed] != 1 {
+	if kinds[NotAHost] != 7 || kinds[Malformed] != 1 {
 		t.Errorf("kinds = %v (%v)", kinds, dropped)
 	}
 	// a service on a wildcard address is dropped as well
@@ -296,5 +296,12 @@ func TestSanitizeTellsAWildcardFromANonsense(t *testing.T) {
 	}
 	if got := (Drop{Kind: Ungrounded, Detail: "x"}).String(); got != "ungrounded: x" {
 		t.Errorf("String = %q", got)
+	}
+}
+
+func TestAZoneIsDroppedFromAnAddress(t *testing.T) {
+	got, err := StateDelta{Hosts: []HostDelta{{IP: "fe80::1%eth0"}}}.Validate()
+	if err != nil || got.Hosts[0].IP != "fe80::1" {
+		t.Errorf("%+v, %v", got.Hosts, err)
 	}
 }

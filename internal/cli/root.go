@@ -44,6 +44,7 @@ func newRootCmd(stdout, stderr io.Writer, info BuildInfo) *cobra.Command {
 		newNextCmd(),
 		newReportCmd(),
 		newMapCmd(),
+		newCaseCmd(),
 		newVersionCmd(info),
 	)
 	return root

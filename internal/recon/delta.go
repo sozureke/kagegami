@@ -220,7 +220,7 @@ func address(s string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("address %q is not an IP address", truncate(s))
 	}
-	addr = addr.Unmap()
+	addr = addr.WithZone("").Unmap()
 	if addr.IsUnspecified() || addr.IsMulticast() || addr == netip.AddrFrom4([4]byte{255, 255, 255, 255}) {
 		return "", fmt.Errorf("%w: %s", errNotAHost, addr)
 	}
