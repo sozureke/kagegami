@@ -437,6 +437,8 @@ func TestReportMarkdown(t *testing.T) {
 		"## Refusals",
 		"| pipeline | no-example | 2 | 0 | 2 | 0 |",
 		"## Checks that failed",
+		"attempt 1 of the model:",
+		"not json",
 		"## Answers",
 		"## Checklists",
 		"- [ ] Recommends something about the web app",
