@@ -1,0 +1,118 @@
+{
+  "name": "ad-dc",
+  "description": "A Windows domain controller: Kerberos, LDAP, SMB, WinRM, no web site.",
+  "case": {
+    "target": "10.10.11.20",
+    "goal": "enumerate the domain and get a user",
+    "scope": [
+      "10.10.11.20"
+    ]
+  },
+  "steps": [
+    {
+      "command": "nmap -sV 10.10.11.20",
+      "output": "Starting Nmap 7.94 ( https://nmap.org ) at 2026-10-20 15:10 UTC\nNmap scan report for dc01.corp.local (10.10.11.20)\nHost is up (0.036s latency).\nNot shown: 993 filtered tcp ports (no-response)\nPORT     STATE SERVICE       VERSION\n53/tcp   open  domain        Simple DNS Plus\n88/tcp   open  kerberos-sec  Microsoft Windows Kerberos (server time: 2026-10-20 15:10:41Z)\n135/tcp  open  msrpc         Microsoft Windows RPC\n139/tcp  open  netbios-ssn   Microsoft Windows netbios-ssn\n389/tcp  open  ldap          Microsoft Windows Active Directory LDAP (Domain: corp.local)\n445/tcp  open  microsoft-ds?\n5985/tcp open  http          Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)\nService Info: Host: DC01; OS: Windows; CPE: cpe:/o:microsoft:windows\n\nNmap done: 1 IP address (1 host up) scanned in 22.40 seconds\n",
+      "delta": {
+        "hosts": [
+          {
+            "ip": "10.10.11.20",
+            "hostname": "dc01.corp.local",
+            "os": "Windows",
+            "status": "up"
+          }
+        ],
+        "services": [
+          {
+            "host_ip": "10.10.11.20",
+            "port": 53,
+            "proto": "tcp",
+            "name": "domain",
+            "state": "open",
+            "version": "Simple DNS Plus"
+          },
+          {
+            "host_ip": "10.10.11.20",
+            "port": 88,
+            "proto": "tcp",
+            "name": "kerberos-sec",
+            "state": "open",
+            "version": "Microsoft Windows Kerberos"
+          },
+          {
+            "host_ip": "10.10.11.20",
+            "port": 135,
+            "proto": "tcp",
+            "name": "msrpc",
+            "state": "open",
+            "version": "Microsoft Windows RPC"
+          },
+          {
+            "host_ip": "10.10.11.20",
+            "port": 139,
+            "proto": "tcp",
+            "name": "netbios-ssn",
+            "state": "open"
+          },
+          {
+            "host_ip": "10.10.11.20",
+            "port": 389,
+            "proto": "tcp",
+            "name": "ldap",
+            "state": "open",
+            "version": "Microsoft Windows Active Directory LDAP (Domain: corp.local)"
+          },
+          {
+            "host_ip": "10.10.11.20",
+            "port": 445,
+            "proto": "tcp",
+            "name": "microsoft-ds",
+            "state": "open"
+          },
+          {
+            "host_ip": "10.10.11.20",
+            "port": 5985,
+            "proto": "tcp",
+            "name": "http",
+            "state": "open",
+            "version": "Microsoft HTTPAPI httpd 2.0"
+          }
+        ]
+      }
+    }
+  ],
+  "checks": [
+    {
+      "id": "ad",
+      "text": "goes for the domain services (SMB, LDAP, Kerberos)",
+      "any": [
+        "smb",
+        "ldap",
+        "kerberos",
+        "445",
+        "389",
+        "88",
+        "netexec",
+        "crackmapexec",
+        "enum4linux",
+        "kerbrute",
+        "rpcclient"
+      ]
+    },
+    {
+      "id": "no-web-tools",
+      "text": "does not use web content scanners on a host with no web site",
+      "none": [
+        "gobuster",
+        "ffuf",
+        "nikto",
+        "wpscan",
+        "dirb"
+      ]
+    }
+  ],
+  "checklist": [
+    "Starts with null or guest enumeration of SMB, LDAP and RPC (cheap, quiet).",
+    "Uses the host name dc01.corp.local and the domain corp.local from the map.",
+    "Treats WinRM (5985) as something to use once there are credentials."
+  ]
+}

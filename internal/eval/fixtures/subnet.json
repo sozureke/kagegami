@@ -1,0 +1,91 @@
+{
+  "name": "subnet",
+  "description": "A /24 with three hosts up: a router-like box, a web server, a file server.",
+  "case": {
+    "target": "10.10.12.0/24",
+    "goal": "find the most promising host",
+    "scope": [
+      "10.10.12.0/24"
+    ]
+  },
+  "steps": [
+    {
+      "command": "nmap -sV 10.10.12.0/24",
+      "output": "Starting Nmap 7.94 ( https://nmap.org ) at 2026-10-20 17:00 UTC\nNmap scan report for 10.10.12.1\nHost is up (0.002s latency).\nPORT   STATE SERVICE VERSION\n22/tcp open  ssh     OpenSSH 8.4p1 Debian 5+deb11u1 (protocol 2.0)\n\nNmap scan report for 10.10.12.10\nHost is up (0.003s latency).\nPORT    STATE SERVICE  VERSION\n80/tcp  open  http     Apache httpd 2.4.41 ((Ubuntu))\n443/tcp open  ssl/http Apache httpd 2.4.41 ((Ubuntu))\n\nNmap scan report for 10.10.12.20\nHost is up (0.004s latency).\nPORT    STATE SERVICE     VERSION\n445/tcp open  netbios-ssn Samba smbd 4.6.2\n\nNmap done: 256 IP addresses (3 hosts up) scanned in 41.77 seconds\n",
+      "delta": {
+        "hosts": [
+          {
+            "ip": "10.10.12.1",
+            "status": "up"
+          },
+          {
+            "ip": "10.10.12.10",
+            "status": "up"
+          },
+          {
+            "ip": "10.10.12.20",
+            "status": "up"
+          }
+        ],
+        "services": [
+          {
+            "host_ip": "10.10.12.1",
+            "port": 22,
+            "proto": "tcp",
+            "name": "ssh",
+            "state": "open",
+            "version": "OpenSSH 8.4p1 Debian 5+deb11u1"
+          },
+          {
+            "host_ip": "10.10.12.10",
+            "port": 80,
+            "proto": "tcp",
+            "name": "http",
+            "state": "open",
+            "version": "Apache httpd 2.4.41"
+          },
+          {
+            "host_ip": "10.10.12.10",
+            "port": 443,
+            "proto": "tcp",
+            "name": "ssl/http",
+            "state": "open",
+            "version": "Apache httpd 2.4.41"
+          },
+          {
+            "host_ip": "10.10.12.20",
+            "port": 445,
+            "proto": "tcp",
+            "name": "netbios-ssn",
+            "state": "open",
+            "version": "Samba smbd 4.6.2"
+          }
+        ]
+      }
+    }
+  ],
+  "checks": [
+    {
+      "id": "host",
+      "text": "names a host of the map",
+      "any": [
+        "10.10.12.1",
+        "10.10.12.10",
+        "10.10.12.20"
+      ]
+    },
+    {
+      "id": "no-sweep",
+      "text": "does not scan the whole /24 again",
+      "none": [
+        "10.10.12.0/24",
+        "10.10.12.1-254"
+      ]
+    }
+  ],
+  "checklist": [
+    "Picks a host deliberately and says why (the web server, or the Samba file server).",
+    "Does not treat the three hosts as one target.",
+    "Does not repeat the sweep that is already on the map."
+  ]
+}

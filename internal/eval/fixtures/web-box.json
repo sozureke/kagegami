@@ -1,0 +1,102 @@
+{
+  "name": "web-box",
+  "description": "A Linux box with SSH and a web app on 80; one content scan done.",
+  "case": {
+    "target": "10.10.11.5",
+    "goal": "get a foothold on the box",
+    "scope": [
+      "10.10.11.5"
+    ]
+  },
+  "steps": [
+    {
+      "command": "nmap -sV -sC 10.10.11.5",
+      "output": "Starting Nmap 7.94 ( https://nmap.org ) at 2026-10-20 14:02 UTC\nNmap scan report for 10.10.11.5\nHost is up (0.041s latency).\nNot shown: 998 closed tcp ports (reset)\nPORT   STATE SERVICE VERSION\n22/tcp open  ssh     OpenSSH 8.9p1 Ubuntu 3ubuntu0.4 (Ubuntu Linux; protocol 2.0)\n80/tcp open  http    nginx 1.18.0 (Ubuntu)\n|_http-title: Acme Portal\n|_http-server-header: nginx/1.18.0 (Ubuntu)\nService Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel\n\nNmap done: 1 IP address (1 host up) scanned in 9.81 seconds\n",
+      "delta": {
+        "hosts": [
+          {
+            "ip": "10.10.11.5",
+            "os": "Linux",
+            "status": "up"
+          }
+        ],
+        "services": [
+          {
+            "host_ip": "10.10.11.5",
+            "port": 22,
+            "proto": "tcp",
+            "name": "ssh",
+            "state": "open",
+            "version": "OpenSSH 8.9p1 Ubuntu 3ubuntu0.4"
+          },
+          {
+            "host_ip": "10.10.11.5",
+            "port": 80,
+            "proto": "tcp",
+            "name": "http",
+            "state": "open",
+            "version": "nginx 1.18.0"
+          }
+        ]
+      }
+    },
+    {
+      "command": "ffuf -u http://10.10.11.5/FUZZ -w /usr/share/wordlists/dirb/common.txt",
+      "output": "        /'___\\  /'___\\           /'___\\\n       /\\ \\__/ /\\ \\__/  __  __  /\\ \\__/\n       \\ \\ ,__\\\\ \\ ,__\\/\\ \\/\\ \\ \\ \\ ,__\\\n        \\ \\ \\_/ \\ \\ \\_/\\ \\ \\_\\ \\ \\ \\ \\_/\n         \\ \\_\\   \\ \\_\\  \\ \\____/  \\ \\_\\\n          \\/_/    \\/_/   \\/___/    \\/_/\n\n :: URL              : http://10.10.11.5/FUZZ\n :: Wordlist         : FUZZ: /usr/share/wordlists/dirb/common.txt\n________________________________________________\n\nadmin                   [Status: 301, Size: 178, Words: 6, Lines: 8, Duration: 40ms]\nlogin                   [Status: 200, Size: 2310, Words: 140, Lines: 52, Duration: 38ms]\nrobots.txt              [Status: 200, Size: 54, Words: 4, Lines: 3, Duration: 41ms]\n:: Progress: [4614/4614] :: Job [1/1] :: Errors: 0 ::\n",
+      "delta": {
+        "web_paths": [
+          {
+            "host_ip": "10.10.11.5",
+            "port": 80,
+            "proto": "tcp",
+            "path": "/admin",
+            "status_code": 301
+          },
+          {
+            "host_ip": "10.10.11.5",
+            "port": 80,
+            "proto": "tcp",
+            "path": "/login",
+            "status_code": 200
+          },
+          {
+            "host_ip": "10.10.11.5",
+            "port": 80,
+            "proto": "tcp",
+            "path": "/robots.txt",
+            "status_code": 200
+          }
+        ]
+      }
+    }
+  ],
+  "checks": [
+    {
+      "id": "web",
+      "text": "builds on the web service (80, login, admin)",
+      "any": [
+        "80",
+        "http",
+        "web",
+        "login",
+        "admin"
+      ]
+    },
+    {
+      "id": "found",
+      "text": "uses something the map found (nginx, /login, /admin, robots.txt)",
+      "any": [
+        "nginx",
+        "/login",
+        "/admin",
+        "robots"
+      ]
+    }
+  ],
+  "checklist": [
+    "Recommends something about the web app (login, admin) before brute-forcing SSH.",
+    "Uses the versions on the map (nginx 1.18.0, OpenSSH 8.9p1), none invented.",
+    "Does not repeat the scans already done (nmap -sV -sC, ffuf on /).",
+    "Every command is against 10.10.11.5."
+  ]
+}

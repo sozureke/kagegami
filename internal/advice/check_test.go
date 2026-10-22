@@ -165,6 +165,25 @@ func TestCheckPipeline(t *testing.T) {
 	}
 }
 
+// A step may rest on an earlier one, and Step has no field to say so. Pinned here so that the day
+// this is fixed it is a decision and not an accident (docs/PROMPTS.md, "Open question").
+func TestAStepThatRestsOnADroppedStepStaysInThePlan(t *testing.T) {
+	c := ctx(t)
+	got, dropped, err := c.CheckPipeline(Pipeline{Summary: "s", Steps: []Step{
+		{Priority: 1, Service: "10.0.0.5:9999/tcp", Vector: "invented service", Why: "w", Commands: []string{"nmap 10.0.0.5"}, Confidence: "high"},
+		{Priority: 2, Service: "10.0.0.5:8000/tcp", Vector: "reuse", Why: "use the credentials from step 1", Commands: []string{"curl -u admin:x http://10.0.0.5:8000/"}, Confidence: "high"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dropped) != 1 || len(got.Steps) != 1 {
+		t.Fatalf("dropped = %v, steps = %+v", dropped, got.Steps)
+	}
+	if got.Steps[0].Priority != 1 || !strings.Contains(got.Steps[0].Why, "from step 1") {
+		t.Errorf("step = %+v: it stays, now numbered 1, still pointing at a step that is gone", got.Steps[0])
+	}
+}
+
 func TestAPipelineWithNothingLeftIsAPleaForRecon(t *testing.T) {
 	c := ctx(t)
 	got, dropped, err := c.CheckPipeline(Pipeline{Summary: "s", Steps: []Step{{Priority: 1, Service: "8.8.8.8", Vector: "v", Why: "w", Commands: []string{"x"}, Confidence: "high"}}})

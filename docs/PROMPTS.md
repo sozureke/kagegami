@@ -90,8 +90,9 @@ shown to the tester:
 
   *Open question:* steps are ordered, and a later step may rest on an earlier one ("with the
   credentials from step 2, try ..."). `Step` has no field for such a dependency, so Kagegami cannot
-  tell, and a step whose predecessor was dropped stays in the plan without its basis. This is
-  untested; the eval should include a plan with dependent steps (see below).
+  tell, and a step whose predecessor was dropped stays in the plan without its basis.
+  `TestAStepThatRestsOnADroppedStepStaysInThePlan` pins today's behaviour so that a change is a
+  decision; how often a model writes such steps is what the `jenkins-chain` fixture of the eval is for.
 
 Only a JSON that does not parse sends `pipeline` back for another try.
 
@@ -142,6 +143,10 @@ Every answer `kagegami pipeline` manages to use is saved as a new row (`pipeline
 the model. This is how today's plan can be compared with an earlier one.
 
 ## What is not measured yet
+
+`make eval` (see `docs/eval/README.md`) is how these get measured: fixture maps for tier 2, tier-1 cases
+including a long unknown output and hostile ones, repeated runs, and a checklist for a person. The
+harness is in; a question below is answered only when a report in `docs/eval` says so.
 
 - Whether the worked example helps tier 2 at all, and, for tier 1, whether "no difference" holds up
   over repeated runs.
