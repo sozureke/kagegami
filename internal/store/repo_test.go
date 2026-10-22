@@ -663,3 +663,56 @@ func TestUsageRefusesNonsense(t *testing.T) {
 		t.Errorf("rejected usage was stored: %+v", totals)
 	}
 }
+
+func TestPipelineRun(t *testing.T) {
+	st, _ := openTemp(t)
+	r := st.Repo()
+
+	run1, err := r.SavePipelineRun(context.Background(), "ollama/llama3.1:8b", "a first summary", `[{"priority":1}]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run1.ID == 0 || run1.Model != "ollama/llama3.1:8b" || run1.Summary != "a first summary" || run1.Steps != `[{"priority":1}]` || run1.CreatedAt.IsZero() {
+		t.Errorf("run1 = %+v", run1)
+	}
+	run2, err := r.SavePipelineRun(context.Background(), "ollama/llama3.1:8b", "a second summary", `[{"priority":1},{"priority":2}]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run2.ID == run1.ID {
+		t.Error("two runs got the same id")
+	}
+
+	all, err := r.ListPipelineRuns(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 || all[0].ID != run1.ID || all[1].ID != run2.ID {
+		t.Errorf("all = %+v, want run1 then run2", all)
+	}
+
+	got, err := r.GetPipelineRun(context.Background(), run1.ID)
+	if err != nil || got != run1 {
+		t.Errorf("GetPipelineRun(%d) = %+v, %v, want %+v", run1.ID, got, err, run1)
+	}
+	if _, err := r.GetPipelineRun(context.Background(), 999); !errors.Is(err, ErrNotFound) {
+		t.Errorf("a missing run: err = %v", err)
+	}
+}
+
+func TestPipelineRunRefusesBlankFields(t *testing.T) {
+	st, _ := openTemp(t)
+	r := st.Repo()
+	for name, args := range map[string][3]string{
+		"blank model":   {"", "s", "[]"},
+		"blank summary": {"m", "", "[]"},
+		"blank steps":   {"m", "s", ""},
+	} {
+		if _, err := r.SavePipelineRun(context.Background(), args[0], args[1], args[2]); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: err = %v", name, err)
+		}
+	}
+	if all, _ := r.ListPipelineRuns(context.Background()); len(all) != 0 {
+		t.Errorf("rejected input was stored: %+v", all)
+	}
+}

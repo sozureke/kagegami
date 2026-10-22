@@ -20,5 +20,4 @@ func newStubCmd(name string) *cobra.Command {
 }
 
 func newWatchCmd() *cobra.Command  { return newStubCmd("watch") }
-func newNextCmd() *cobra.Command   { return newStubCmd("next") }
 func newReportCmd() *cobra.Command { return newStubCmd("report") }

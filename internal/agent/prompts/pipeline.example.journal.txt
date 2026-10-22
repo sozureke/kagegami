@@ -1,0 +1,2 @@
+[2026-01-05 10:00] tester: starting recon
+[2026-01-05 10:02] tool: nmap found 2 open ports

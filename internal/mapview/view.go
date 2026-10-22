@@ -41,31 +41,38 @@ type Host struct {
 	FirstSeen time.Time `json:"first_seen"`
 	LastSeen  time.Time `json:"last_seen"`
 	Services  []Service `json:"services"`
+	// SourceBlobID is the command this was last updated from, if any. It is not part of the
+	// view a person sees (kagegami map prints and encodes the map without it); a caller that
+	// builds a prompt for a model can cite it as the evidence behind a line.
+	SourceBlobID *int64 `json:"-"`
 }
 
 // Service is a port on a host with the web paths found on it.
 type Service struct {
-	Port    int       `json:"port"`
-	Proto   string    `json:"proto"`
-	State   string    `json:"state"`
-	Name    string    `json:"name,omitempty"`
-	Version string    `json:"version,omitempty"`
-	Paths   []WebPath `json:"paths,omitempty"`
+	Port         int       `json:"port"`
+	Proto        string    `json:"proto"`
+	State        string    `json:"state"`
+	Name         string    `json:"name,omitempty"`
+	Version      string    `json:"version,omitempty"`
+	Paths        []WebPath `json:"paths,omitempty"`
+	SourceBlobID *int64    `json:"-"`
 }
 
 // WebPath is a path found on a web service.
 type WebPath struct {
-	Path       string `json:"path"`
-	StatusCode *int   `json:"status_code,omitempty"`
-	Note       string `json:"note,omitempty"`
+	Path         string `json:"path"`
+	StatusCode   *int   `json:"status_code,omitempty"`
+	Note         string `json:"note,omitempty"`
+	SourceBlobID *int64 `json:"-"`
 }
 
 // Finding is something worth reporting.
 type Finding struct {
-	Severity    string    `json:"severity"`
-	Title       string    `json:"title"`
-	Description string    `json:"description,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
+	Severity     string    `json:"severity"`
+	Title        string    `json:"title"`
+	Description  string    `json:"description,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	SourceBlobID *int64    `json:"-"`
 }
 
 // Credential is a login that was found. Its secret is a secret.String, which prints and
@@ -94,19 +101,19 @@ func Load(ctx context.Context, st *store.Store) (View, error) {
 		return View{}, err
 	}
 	for _, h := range hosts {
-		host := Host{IP: h.IP, Hostname: h.Hostname, OS: h.OS, Status: h.Status, FirstSeen: h.FirstSeen, LastSeen: h.LastSeen, Services: []Service{}}
+		host := Host{IP: h.IP, Hostname: h.Hostname, OS: h.OS, Status: h.Status, FirstSeen: h.FirstSeen, LastSeen: h.LastSeen, Services: []Service{}, SourceBlobID: h.SourceBlobID}
 		svcs, err := r.ListServices(ctx, h.ID)
 		if err != nil {
 			return View{}, err
 		}
 		for _, s := range svcs {
-			svc := Service{Port: s.Port, Proto: s.Proto, State: s.State, Name: s.Name, Version: s.Version}
+			svc := Service{Port: s.Port, Proto: s.Proto, State: s.State, Name: s.Name, Version: s.Version, SourceBlobID: s.SourceBlobID}
 			paths, err := r.ListWebPaths(ctx, s.ID)
 			if err != nil {
 				return View{}, err
 			}
 			for _, p := range paths {
-				svc.Paths = append(svc.Paths, WebPath{Path: p.Path, StatusCode: p.StatusCode, Note: p.Note})
+				svc.Paths = append(svc.Paths, WebPath{Path: p.Path, StatusCode: p.StatusCode, Note: p.Note, SourceBlobID: p.SourceBlobID})
 			}
 			host.Services = append(host.Services, svc)
 		}
@@ -118,7 +125,7 @@ func Load(ctx context.Context, st *store.Store) (View, error) {
 		return View{}, err
 	}
 	for _, f := range findings {
-		v.Findings = append(v.Findings, Finding{Severity: f.Severity, Title: f.Title, Description: f.Description, CreatedAt: f.CreatedAt})
+		v.Findings = append(v.Findings, Finding{Severity: f.Severity, Title: f.Title, Description: f.Description, CreatedAt: f.CreatedAt, SourceBlobID: f.SourceBlobID})
 	}
 
 	creds, err := r.ListCredentials(ctx)

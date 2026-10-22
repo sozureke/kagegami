@@ -1,0 +1,5 @@
+target: 10.10.10.5
+goal: user and root flag
+scope: 10.10.10.5
+phase: recon
+rules: (not set)
