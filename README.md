@@ -1,10 +1,12 @@
-# kagegami
+<p align="center"><img src="resources/logo.gif" alt="Kagegami" width="420"></p>
+
+<h1 align="center">KAGEGAMI</h1>
 
 A pentest recon assistant that lives in a tmux pane next to your working terminal.
 
-> **Status: pre-alpha.** Nothing works yet. The interface, config format and database schema will change without notice.
+---
 
-Kagegami watches the output of the commands you run (read-only), keeps a map of the target and an engagement journal, suggests next steps, and builds a work pipeline from the recon you have collected. A local model (Ollama) is the default; cloud providers are optional and only ever see masked data.
+Kagegami watches the output of the commands you run (read-only), keeps a map of the target and an engagement journal, suggests next steps, and builds a work pipeline from the recon you've collected. A local model (Ollama) is the default; cloud providers are optional and only ever see masked data.
 
 ## Design principles
 
@@ -17,58 +19,8 @@ Kagegami watches the output of the commands you run (read-only), keeps a map of 
 ## Requirements
 
 - Linux or macOS
-- tmux, zsh or bash
+- tmux and zsh (bash support is planned)
 - [Ollama](https://ollama.com) for the default local mode
-
-## Tuning the opening animation
-
-`kagegami watch` opens with an animated ASCII splash: the art appears in rings that spread from a
-centre, pulses run over it, it glitches for a moment and dissolves. `--no-anim` (or
-`KAGEGAMI_NO_ANIM=1`) skips it. The art is `internal/splash/assets/art.txt`; replace the file to
-change it. To try settings, run the demo:
-
-```sh
-go run ./cmd/splash-demo                          # the defaults
-go run ./cmd/splash-demo -glitch 80 -color cyan -loop
-go run ./cmd/splash-demo -config splash.yaml      # settings from a file
-go run ./cmd/splash-demo -art my-art.txt          # another art, without rebuilding
-```
-
-Any key stops it. A flag beats the file, and the file beats the defaults. In the file the names are
-the ones in the first column (`center_x: 30`). The same names with a dash are the flags
-(`-center-x 30`).
-
-| parameter | what it does | example |
-|---|---|---|
-| `speed` (1.8) | time multiplier of the appearance and the pulses; higher is faster | `-speed 3` is brisk, `-speed 0.8` calm |
-| `fps` (30) | frames per second; higher is smoother and costs CPU while it plays | `-fps 60` |
-| `rings` (6) | rings the art appears in, from the centre out; more is a finer ripple | `-rings 12`; `-rings 1` appears in one sweep |
-| `pulse` (5) | pause between two rings, in frames | `-pulse 0` appears together, `-pulse 10` spreads out |
-| `fade` (12) | frames a character takes to appear; 1 is a hard cut | `-fade 4` snappy, `-fade 30` soft |
-| `jitter` (2) | random spread of each character's start, in frames; makes a ring's edge ragged | `-jitter 0` clean line |
-| `center_x`, `center_y` (50, 50) | centre of the rings and pulses, % of the art's size | `-center-x 0 -center-y 0` starts at the top left |
-| `pulse_freq` (35) | how often a pulse starts after the art has appeared, 0-100 | `-pulse-freq 0` none |
-| `pulse_speed` (40) | how fast a pulse travels | `-pulse-speed 80` |
-| `pulse_width` (18) | thickness of a pulse, in tenths of a cell | `-pulse-width 40` thick ring |
-| `glitch` (55) | amount of glitching, 0-100: shifted blocks and rows, noise, rebuilt patches, flicker; 0 turns it all off | `-glitch 90` wild, `-glitch 0` clean |
-| `rgb_split` (50) | how often a glitching row shows red and cyan ghosts, 0-100 | `-rgb-split 0` none |
-| `scanlines` (true) | darken every second row | `-scanlines=false` |
-| `vignette` (true) | darken towards the edges | `-vignette=false` |
-| `cell_aspect` (0.5) | width / height of a terminal cell; raise it if rings look like upright ovals | `-cell-aspect 0.45` |
-| `fade_out_sec` (1.2) | seconds the art takes to dissolve | `-fade-out-sec 2` |
-| `hold_sec` (2) | seconds the finished art glitches and pulses before dissolving | `-hold-sec 0.5` |
-| `total_max_sec` (6) | longest the whole animation may last; the hold is cut first, then the dissolve starts early | `-total-max-sec 3` |
-| `loop` (false) | play again when it ends, until a key is pressed | `-loop` |
-| `color` (`#39ff14`) | hex colour, or `green`, `white`, `magenta`, `cyan` | `-color "#ff8800"`, `-color magenta` |
-| `mode` (`fade`) | `fade` grows a character through denser glyphs; `decode` shows random characters until it settles | `-mode decode` |
-| `seed` (0) | a non-zero seed repeats the same frames; 0 is random each time | `-seed 42` |
-
-Colours need a terminal that shows 24 bits. If yours does not, the animation falls back to 256
-colours and says so once. Inside tmux, add this to `~/.tmux.conf` and restart tmux:
-
-```
-set -as terminal-features ',*:RGB'
-```
 
 ## Authorized use only
 
@@ -78,8 +30,18 @@ Many certification exams restrict or forbid AI assistance (OSCP, for example). C
 
 ## Documentation
 
-- [Architecture decisions](docs/adr/)
+Architecture decisions (ADRs) record what was decided and why. They are in [docs/adr](docs/adr/).
 
-## License
-
-[MIT](LICENSE)
+| ADR                                                                              | Decision                                                                                                           |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| [0001 Name, license, paths](docs/adr/0001-name-license-paths.md)                 | The name kagegami, the MIT license, and where config and data live (XDG directories, `KAGEGAMI_HOME`)              |
+| [0002 Go version and dependencies](docs/adr/0002-dependencies.md)                | Go 1.27, Charm v2 for the panel, cobra, pure-Go SQLite, and how versions are pinned                                |
+| [0003 Release process](docs/adr/0003-release-process.md)                         | The maintainer tags releases by hand; building, signing and publishing are automated                               |
+| [0004 Per-case storage layout](docs/adr/0004-storage-layout.md)                  | One directory and one SQLite database per engagement, with raw command output next to it                           |
+| [0005 Handling of secrets](docs/adr/0005-secrets.md)                             | Secrets have their own type that prints as `•••`, and only allow-listed code may reveal one                        |
+| [0006 How command output is captured](docs/adr/0006-command-capture.md)          | Shell hooks print markers with a secret nonce into the pane stream, and Kagegami cuts the output at them           |
+| [0007 Supported tmux versions](docs/adr/0007-tmux-versions-and-capture-check.md) | Versions are verified only when observed; a self-check at start, not the version number, decides                   |
+| [0008 Shell hooks and the capture nonce](docs/adr/0008-shell-hooks.md)           | You load the hook yourself with one line; it reads the nonce from a private file, never from the environment       |
+| [0009 How the pane stream reaches Kagegami](docs/adr/0009-pane-stream.md)        | A named pipe in a private run directory, with a set order for starting and stopping                                |
+| [0010 Cloud models and refusals](docs/adr/0010-cloud-models-and-refusals.md)     | Three connectors at most, no subscriptions, the cloud off by default and masked, and refusals shown, never retried |
+| [0011 Trivial command filter](docs/adr/0011-trivial-command-filter.md)           | A finished command is dropped only when it cannot tell Kagegami anything                                           |

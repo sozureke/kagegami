@@ -40,6 +40,7 @@ func newRootCmd(stdout, stderr io.Writer, info BuildInfo) *cobra.Command {
 	root.AddCommand(
 		newInitCmd(),
 		newWatchCmd(info),
+		newSplashCmd(),
 		newHookCmd(),
 		newNextCmd(),
 		newPipelineCmd(),

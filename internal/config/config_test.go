@@ -426,3 +426,20 @@ func TestOllamaAddressFromTheFile(t *testing.T) {
 		t.Errorf("%+v, %v", cfg.Model, err)
 	}
 }
+
+func TestSplashSettingsAreCheckedWithTheRest(t *testing.T) {
+	cfg := Default()
+	cfg.Splash.Scale = 2
+	cfg.Splash.Glitch = 500
+	err := cfg.Validate()
+	if err == nil || !strings.Contains(err.Error(), "splash:") || !strings.Contains(err.Error(), "scale") || !strings.Contains(err.Error(), "glitch") {
+		t.Errorf("Validate = %v", err)
+	}
+	if _, err := parse([]byte("splash:\n  glich: 5\n"), "c.yaml"); err == nil {
+		t.Error("a misspelt splash key must be refused")
+	}
+	got, err := parse([]byte("splash:\n  enabled: false\n  scale: 0.5\n"), "c.yaml")
+	if err != nil || got.Splash.Enabled || got.Splash.Scale != 0.5 || got.Splash.Glitch != Default().Splash.Glitch {
+		t.Errorf("a partial splash section keeps the other defaults: %+v, %v", got.Splash, err)
+	}
+}

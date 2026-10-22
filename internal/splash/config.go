@@ -4,19 +4,25 @@
 package splash
 
 import (
-	"bytes"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"strings"
-
-	"go.yaml.in/yaml/v3"
 )
 
 // Config holds every parameter of the animation. The comment of each field says what it does and
 // which way to turn it; the defaults are in DefaultConfig.
 type Config struct {
+	// Enabled plays the splash when the panel starts. false skips it; `kagegami splash` still plays it.
+	Enabled bool `yaml:"enabled"`
+
+	// Scale shrinks the art before anything else: 1 keeps its size, 0.5 makes it half as wide and
+	// half as tall. It never enlarges, so it is from above 0 up to 1.
+	Scale float64 `yaml:"scale"`
+	// Fit also shrinks the art until it fits the terminal, whatever its size, so that settings made
+	// once keep working in a small pane. false crops what does not fit.
+	Fit bool `yaml:"fit"`
+
 	// Speed multiplies the time of the appearance and of the pulses. Higher is faster: 2.5 is
 	// brisk, 1 is calm. The seconds of the hold and of the fade-out are not affected.
 	Speed float64 `yaml:"speed"`
@@ -75,7 +81,9 @@ type Config struct {
 	// Loop plays the animation again when it ends, until a key is pressed.
 	Loop bool `yaml:"loop"`
 
-	// Color is the colour of the art: a hex colour such as #39ff14, or green, white, magenta, cyan.
+	// Color is the colour of the art: "chrome" (metallic white: bright at the top, a darker band,
+	// a second reflection, darker at the bottom), a hex colour such as #eceef2, or green, white,
+	// magenta, cyan.
 	Color string `yaml:"color"`
 	// Mode is how a character appears: "fade" grows it through a scale of denser glyphs,
 	// "decode" shows random characters until it settles.
@@ -88,14 +96,15 @@ type Config struct {
 // DefaultConfig returns the starting values.
 func DefaultConfig() Config {
 	return Config{
-		Speed: 1.8, FPS: 30,
-		Rings: 6, Pulse: 5, Fade: 12, Jitter: 2,
+		Enabled: true, Scale: 1, Fit: true,
+		Speed: 1.5, FPS: 24,
+		Rings: 4, Pulse: 8, Fade: 22, Jitter: 3,
 		CenterX: 50, CenterY: 50,
-		PulseFreq: 35, PulseSpeed: 40, PulseWidth: 18,
-		Glitch: 55, RGBSplit: 50,
+		PulseFreq: 25, PulseSpeed: 25, PulseWidth: 30,
+		Glitch: 70, RGBSplit: 40,
 		Scanlines: true, Vignette: true, CellAspect: 0.5,
-		FadeOutSec: 1.2, HoldSec: 2, TotalMaxSec: 6,
-		Color: "#39ff14", Mode: "fade",
+		FadeOutSec: 1.5, HoldSec: 4, TotalMaxSec: 8,
+		Color: ColorChrome, Mode: "fade",
 	}
 }
 
@@ -113,6 +122,7 @@ func (c Config) Validate() error {
 			errs = append(errs, fmt.Errorf(format, args...))
 		}
 	}
+	check(c.Scale > 0 && c.Scale <= 1, "scale must be above 0 and at most 1, got %v", c.Scale)
 	check(c.Speed > 0, "speed must be above 0, got %v", c.Speed)
 	check(c.FPS >= 1 && c.FPS <= 120, "fps must be from 1 to 120, got %d", c.FPS)
 	check(c.Rings >= 1, "rings must be at least 1, got %d", c.Rings)
@@ -140,11 +150,42 @@ func (c Config) Validate() error {
 // RGB is a colour.
 type RGB struct{ R, G, B uint8 }
 
+// ColorChrome is the metallic white of the palette (DESIGN.md): not one colour but a shading from
+// the top of the art to its bottom, the way a polished surface reflects.
+const ColorChrome = "chrome"
+
+// chromeStops are the stops of the shading, from the top (0) to the bottom (1) of the art.
+var chromeStops = []struct {
+	at float64
+	c  RGB
+}{
+	{0, RGB{0xff, 0xff, 0xff}},
+	{0.30, RGB{0xd9, 0xdd, 0xe4}},
+	{0.50, RGB{0x9d, 0xa3, 0xae}},
+	{0.62, RGB{0xee, 0xf0, 0xf4}},
+	{1, RGB{0x7a, 0x80, 0x8c}},
+}
+
+// chromeAt is the shading at a height from 0 (top) to 1 (bottom).
+func chromeAt(at float64) RGB {
+	at = min(max(at, 0), 1)
+	for i := 1; i < len(chromeStops); i++ {
+		a, b := chromeStops[i-1], chromeStops[i]
+		if at <= b.at {
+			t := (at - a.at) / (b.at - a.at)
+			mix := func(x, y uint8) uint8 { return toByte(float64(x) + (float64(y)-float64(x))*t) }
+			return RGB{mix(a.c.R, b.c.R), mix(a.c.G, b.c.G), mix(a.c.B, b.c.B)}
+		}
+	}
+	return chromeStops[len(chromeStops)-1].c
+}
+
 var presets = map[string]RGB{
-	"green":   {0x39, 0xff, 0x14},
-	"white":   {0xff, 0xff, 0xff},
-	"magenta": {0xff, 0x00, 0xff},
-	"cyan":    {0x00, 0xff, 0xff},
+	ColorChrome: {0xec, 0xee, 0xf2}, // what a single colour of chrome looks like; Frame shades it
+	"green":     {0x39, 0xff, 0x14},
+	"white":     {0xff, 0xff, 0xff},
+	"magenta":   {0xff, 0x00, 0xff},
+	"cyan":      {0x00, 0xff, 0xff},
 }
 
 // ParseColor reads a preset name or a hex colour (#rrggbb or #rgb).
@@ -155,7 +196,7 @@ func ParseColor(s string) (RGB, error) {
 	}
 	digits, ok := strings.CutPrefix(s, "#")
 	if !ok {
-		return RGB{}, fmt.Errorf("color %q is neither a preset (green, white, magenta, cyan) nor a hex colour", s)
+		return RGB{}, fmt.Errorf("color %q is neither a preset (chrome, green, white, magenta, cyan) nor a hex colour", s)
 	}
 	if len(digits) == 3 {
 		digits = string([]byte{digits[0], digits[0], digits[1], digits[1], digits[2], digits[2]})
@@ -165,19 +206,4 @@ func ParseColor(s string) (RGB, error) {
 		return RGB{}, fmt.Errorf("color %q is not #rrggbb or #rgb", s)
 	}
 	return RGB{b[0], b[1], b[2]}, nil
-}
-
-// LoadYAML reads a configuration over the defaults: a field the file does not mention keeps its
-// default, and a field the file spells wrongly is an error.
-func LoadYAML(data []byte) (Config, error) {
-	cfg := DefaultConfig()
-	dec := yaml.NewDecoder(bytes.NewReader(data))
-	dec.KnownFields(true)
-	if err := dec.Decode(&cfg); err != nil && !errors.Is(err, io.EOF) {
-		return Config{}, fmt.Errorf("splash config: %w", err)
-	}
-	if err := cfg.Validate(); err != nil {
-		return Config{}, err
-	}
-	return cfg, nil
 }

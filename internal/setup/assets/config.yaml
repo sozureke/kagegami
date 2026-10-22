@@ -52,3 +52,34 @@ capture:
 
 logging:
   level: info # debug | info | warn | error
+
+# The opening animation, played when the panel starts. Settle it once here and forget it: try a
+# change with `kagegami splash` (add --loop to watch it again and again). The art itself is the
+# file internal/splash/assets/art.txt in the source; it is shrunk to fit the terminal on its own.
+splash:
+  enabled: true # false skips the animation at start; `kagegami splash` still plays it
+  scale: 1 # 1 keeps the size of the art, 0.5 halves it; it is never enlarged
+  fit: true # also shrink the art until it fits the terminal; false crops what does not fit
+  color: chrome # metallic white shading; or a hex colour (#eceef2), or green | white | magenta | cyan
+  mode: fade # fade | decode: how a character appears
+  speed: 1.5 # time multiplier of the appearance and the pulses; higher is faster
+  fps: 24 # frames per second; higher is smoother and costs more CPU while it plays
+  rings: 4 # rings the art appears in, from the centre out; more is a finer ripple
+  pulse: 8 # pause between rings, in frames
+  fade: 22 # frames a character takes to appear; 1 is a hard cut
+  jitter: 3 # random spread of each character's start, in frames
+  center_x: 50 # centre of the rings and pulses, % of the art's width
+  center_y: 50 # and of its height
+  pulse_freq: 25 # how often a pulse starts after the art has appeared, 0-100
+  pulse_speed: 25 # how fast a pulse travels
+  pulse_width: 30 # thickness of a pulse, in tenths of a cell
+  glitch: 70 # amount of glitching, 0-100; 0 turns it all off
+  rgb_split: 40 # how often a glitching row shows red and cyan ghosts, 0-100
+  scanlines: true # darken every second row
+  vignette: true # darken towards the edges
+  cell_aspect: 0.5 # width / height of a terminal cell; raise it if rings look like upright ovals
+  fade_out_sec: 1.5 # seconds the art takes to dissolve
+  hold_sec: 4 # seconds the finished art glitches before it dissolves
+  total_max_sec: 8 # the longest the whole animation may last
+  loop: false # play again when it ends, until a key is pressed
+  seed: 0 # a non-zero seed repeats the same frames; 0 is random each time
