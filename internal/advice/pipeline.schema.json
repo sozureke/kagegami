@@ -1,0 +1,25 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "summary": {"type": "string"},
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "priority": {"type": "integer"},
+          "service": {"type": "string"},
+          "vector": {"type": "string"},
+          "why": {"type": "string"},
+          "commands": {"type": "array", "items": {"type": "string"}},
+          "confidence": {"type": "string", "enum": ["low", "medium", "high"]}
+        },
+        "required": ["priority", "service", "vector", "why", "commands", "confidence"]
+      }
+    },
+    "needs_recon": {"type": "boolean"}
+  },
+  "required": ["summary", "steps", "needs_recon"]
+}

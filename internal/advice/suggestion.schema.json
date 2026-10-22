@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "command": {"type": "string"},
+    "rationale": {"type": "string"},
+    "expected": {"type": "string"},
+    "risk": {"type": "string", "enum": ["low", "medium", "high"]},
+    "confidence": {"type": "string", "enum": ["low", "medium", "high"]},
+    "needs_recon": {"type": "boolean"}
+  },
+  "required": ["command", "rationale", "expected", "risk", "confidence", "needs_recon"]
+}
