@@ -134,6 +134,12 @@ func (r Report) WriteMarkdown(w io.Writer) error {
 			if o.Answer != "" {
 				b.WriteString("```text\n" + clip(o.Answer, 1500) + "\n```\n\n")
 			}
+			// What the model said is the only way to tell a refusal that was deserved from one that was not.
+			if o.Status == StatusUnusable {
+				for i, a := range o.Attempts {
+					fmt.Fprintf(&b, "attempt %d of the model:\n\n```text\n%s\n```\n\n", i+1, clip(a, 1000))
+				}
+			}
 			for _, d := range o.Dropped {
 				fmt.Fprintf(&b, "- left out: %s\n", oneLine(d, 200))
 			}
