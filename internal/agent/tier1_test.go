@@ -185,8 +185,23 @@ func TestHeadAndTail(t *testing.T) {
 
 func validUTF8(s string) bool { return strings.ToValidUTF8(s, "\x00") == s }
 
+// words returns a distinct word made of letters only for each i: lines that differ in a word are
+// of different shapes, so collapse leaves them alone.
+func words(i int) string {
+	b := make([]byte, 5)
+	for k := range b {
+		b[k] = byte('a' + i%26)
+		i /= 26
+	}
+	return string(b)
+}
+
 func TestTheRequestShowsOnlyHeadAndTail(t *testing.T) {
-	out := "HEADLINE\n" + strings.Repeat("middle line\n", 2000) + "TAILLINE\n"
+	var mid strings.Builder
+	for i := range 2000 {
+		mid.WriteString("middle " + words(i) + "\n")
+	}
+	out := "HEADLINE\n" + mid.String() + "TAILLINE\n"
 	f := llmtest.NewFake(llmtest.Text(`{}`))
 	if _, err := tier1(f, Tier1Options{Head: 100, Tail: 100}).Extract(bg, "cmd", 0, out); err != nil {
 		t.Fatal(err)

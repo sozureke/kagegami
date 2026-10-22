@@ -455,7 +455,7 @@ func TestHugeOutputIsCleanedUpToALimit(t *testing.T) {
 func TestADumpOfTenThousandLinesIsBoundedForTheModel(t *testing.T) {
 	var dump strings.Builder
 	for i := range 10_000 {
-		fmt.Fprintf(&dump, "line %05d of a long dump from a tool nobody wrote a parser for\n", i)
+		fmt.Fprintf(&dump, "line %s of a long dump from a tool nobody wrote a parser for\n", words(i))
 	}
 	dump.WriteString("THE LAST LINE\n")
 	f := llmtest.NewFake(llmtest.Text(`{}`))
@@ -479,7 +479,7 @@ func TestADumpOfTenThousandLinesIsBoundedForTheModel(t *testing.T) {
 		t.Errorf("the whole request is %d bytes", total)
 	}
 	user := reqs[0].Messages[0].Content
-	if !strings.Contains(user, "line 00000") || !strings.Contains(user, "THE LAST LINE") || !strings.Contains(user, "bytes omitted") || strings.Contains(user, "line 05000") {
+	if !strings.Contains(user, "line "+words(0)) || !strings.Contains(user, "THE LAST LINE") || !strings.Contains(user, "bytes omitted") || strings.Contains(user, "line "+words(5000)) {
 		t.Error("the model must see the start and the end of the dump and be told that the middle is missing")
 	}
 	// and nothing was lost: the whole dump is on disk
