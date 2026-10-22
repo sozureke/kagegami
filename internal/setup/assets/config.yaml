@@ -19,6 +19,11 @@ providers:
     # so any other address counts as remote and its data is masked like data sent to a cloud.
     base_url: http://localhost:11434
 
+limits:
+  # The most tokens the models may use in one run. At the ceiling they stop and what has been
+  # collected is kept; the output of commands is still recorded. 0 means no ceiling.
+  session_tokens: 1000000
+
 privacy:
   mask_credentials: true # credentials and hashes become ••• before anything leaves your machine
   mask_flags: true

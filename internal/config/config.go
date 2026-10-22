@@ -20,6 +20,7 @@ var ErrNotFound = errors.New("config file not found")
 type Config struct {
 	Model      Model            `yaml:"model"`
 	Providers  Providers        `yaml:"providers"`
+	Limits     Limits           `yaml:"limits"`
 	Privacy    Privacy          `yaml:"privacy"`
 	Execution  Execution        `yaml:"execution"`
 	Engagement Engagement       `yaml:"engagement"`
@@ -43,6 +44,13 @@ func (m Model) Tier2Spec() string {
 		return m.Tier1
 	}
 	return m.Tier2
+}
+
+// Limits bound what a session may spend.
+type Limits struct {
+	// SessionTokens is the most tokens the models may use in one run of kagegami. When it is
+	// reached the models stop and what has been collected is kept. Zero means no ceiling.
+	SessionTokens int `yaml:"session_tokens"`
 }
 
 // Providers holds the settings of the model providers.
@@ -92,6 +100,7 @@ func Default() Config {
 	return Config{
 		Model:      Model{Tier1: "ollama/llama3.1:8b"},
 		Providers:  Providers{Ollama: Ollama{BaseURL: "http://localhost:11434"}},
+		Limits:     Limits{SessionTokens: 1_000_000},
 		Privacy:    Privacy{MaskCredentials: true, MaskFlags: true},
 		Execution:  Execution{Mode: "propose", ConfirmDestructive: true},
 		Engagement: Engagement{ScaffoldFolders: true, AutoReport: true},
@@ -149,6 +158,9 @@ func (c Config) Validate() error {
 	}
 	if u, err := url.Parse(c.Providers.Ollama.BaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil {
 		add("providers.ollama.base_url: %q is invalid (expected an http or https URL such as http://localhost:11434)", c.Providers.Ollama.BaseURL)
+	}
+	if c.Limits.SessionTokens < 0 {
+		add("limits.session_tokens: %d is invalid (expected 0 for no ceiling, or a positive number)", c.Limits.SessionTokens)
 	}
 	oneOf("execution.mode", c.Execution.Mode, "propose", "approve-run")
 	oneOf("capture.trigger", c.Capture.Trigger, "shell-hooks", "pipe-pane")

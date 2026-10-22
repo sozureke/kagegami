@@ -29,6 +29,7 @@ commands:
       findings, credentials (always masked) and the agent's notes.
 
       Closed ports, long path lists and old notes are folded; --all shows everything.
-      --json prints the whole map as JSON. The command only reads the case.
+      --stats adds the tokens the models have used. --json prints the whole map as JSON.
+      The command only reads the case.
   version:
     short: Print version information

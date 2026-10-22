@@ -18,6 +18,18 @@ type View struct {
 	Credentials []Credential `json:"credentials"`
 	// Notes are the remarks the agent and the parsers made (script output, observations).
 	Notes []Note `json:"notes"`
+	// Usage is what the models have used on this case, by tier and model.
+	Usage []Usage `json:"usage"`
+}
+
+// Usage is the use of one model in one tier.
+type Usage struct {
+	Tier             string `json:"tier"`
+	Model            string `json:"model"`
+	Calls            int    `json:"calls"`
+	Failed           int    `json:"failed"`
+	PromptTokens     int    `json:"prompt_tokens"`
+	CompletionTokens int    `json:"completion_tokens"`
 }
 
 // Host is a host with its services.
@@ -75,7 +87,7 @@ type Note struct {
 // order (by address, port, path; by the time it was recorded).
 func Load(ctx context.Context, st *store.Store) (View, error) {
 	r := st.Repo()
-	v := View{Hosts: []Host{}, Findings: []Finding{}, Credentials: []Credential{}, Notes: []Note{}}
+	v := View{Hosts: []Host{}, Findings: []Finding{}, Credentials: []Credential{}, Notes: []Note{}, Usage: []Usage{}}
 
 	hosts, err := r.ListHosts(ctx)
 	if err != nil {
@@ -125,6 +137,14 @@ func Load(ctx context.Context, st *store.Store) (View, error) {
 		if e.Author == "ai" {
 			v.Notes = append(v.Notes, Note{Time: e.Time, Text: e.Text})
 		}
+	}
+
+	totals, err := r.UsageTotals(ctx)
+	if err != nil {
+		return View{}, err
+	}
+	for _, t := range totals {
+		v.Usage = append(v.Usage, Usage{Tier: t.Tier, Model: t.Model, Calls: t.Calls, Failed: t.Failed, PromptTokens: t.PromptTokens, CompletionTokens: t.CompletionTokens})
 	}
 	return v, nil
 }
