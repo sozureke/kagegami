@@ -308,3 +308,56 @@ func TestStatsOfACaseWithoutModelsAndOfAnEmptyMap(t *testing.T) {
 		t.Errorf("an empty list of usage must be a list:\n%s", js.String())
 	}
 }
+
+func TestSourceBlobIDIsCarriedButNeverShown(t *testing.T) {
+	st := openStore(t)
+	blob, err := st.Repo().CreateBlob(bg, "nmap x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := recon.StateDelta{
+		Hosts:    []recon.HostDelta{{IP: "10.0.0.1"}},
+		Services: []recon.ServiceDelta{{HostIP: "10.0.0.1", Port: 22, Proto: "tcp"}},
+		WebPaths: []recon.WebPathDelta{{HostIP: "10.0.0.1", Port: 80, Proto: "tcp", Path: "/a"}},
+		Findings: []recon.FindingDelta{{Severity: "info", Title: "f"}},
+	}
+	if _, err := pipeline.Apply(bg, st, d, &blob.ID); err != nil {
+		t.Fatal(err)
+	}
+	v, err := Load(bg, st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := v.Hosts[0]
+	if h.SourceBlobID == nil || *h.SourceBlobID != blob.ID {
+		t.Errorf("host SourceBlobID = %v, want %d", h.SourceBlobID, blob.ID)
+	}
+	for _, svc := range h.Services {
+		if svc.SourceBlobID == nil || *svc.SourceBlobID != blob.ID {
+			t.Errorf("service %d SourceBlobID = %v", svc.Port, svc.SourceBlobID)
+		}
+		for _, p := range svc.Paths {
+			if p.SourceBlobID == nil || *p.SourceBlobID != blob.ID {
+				t.Errorf("path %q SourceBlobID = %v", p.Path, p.SourceBlobID)
+			}
+		}
+	}
+	if v.Findings[0].SourceBlobID == nil || *v.Findings[0].SourceBlobID != blob.ID {
+		t.Errorf("finding SourceBlobID = %v", v.Findings[0].SourceBlobID)
+	}
+
+	var jsBuf bytes.Buffer
+	if err := JSON(&jsBuf, v); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(jsBuf.String(), "source_blob") || strings.Contains(jsBuf.String(), "SourceBlobID") {
+		t.Errorf("the source blob leaked into the JSON a person sees:\n%s", jsBuf.String())
+	}
+	var textBuf bytes.Buffer
+	if err := Text(&textBuf, v, Options{All: true}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(textBuf.String(), "blob") {
+		t.Errorf("the source blob leaked into the text a person sees:\n%s", textBuf.String())
+	}
+}
