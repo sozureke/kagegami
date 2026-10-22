@@ -9,6 +9,16 @@ commands:
     short: Create the configuration (and optionally a case)
   watch:
     short: Open the side panel next to your terminal (tmux)
+    long: |-
+      The side panel: one stream of what you run and what Kagegami made of it, with the map, the
+      pipeline and the help one key away (m, p, ?).
+
+      The panel that watches your shell in a tmux split is not ready yet. For now:
+
+          kagegami watch --demo
+
+      plays a made-up session in this terminal, so that the look and the keys can be tried.
+      Press n for a (made-up) suggestion, q to quit.
   hook:
     short: Print the shell hook that lets Kagegami see where commands start and end
     long: |-
