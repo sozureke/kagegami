@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -18,6 +19,7 @@ var ErrNotFound = errors.New("config file not found")
 
 type Config struct {
 	Model      Model            `yaml:"model"`
+	Providers  Providers        `yaml:"providers"`
 	Privacy    Privacy          `yaml:"privacy"`
 	Execution  Execution        `yaml:"execution"`
 	Engagement Engagement       `yaml:"engagement"`
@@ -26,10 +28,32 @@ type Config struct {
 	Logging    Logging          `yaml:"logging"`
 }
 
+// Model names the models, as provider/model. The person chooses them: tier1 reads the output of
+// commands that have no parser and extracts what is in it, tier2 answers `next` and `pipeline`.
 type Model struct {
-	Tier1         string `yaml:"tier1"`
+	Tier1 string `yaml:"tier1"`
+	// Tier2 may be empty, which means the model of tier1 does both.
 	Tier2         string `yaml:"tier2"`
 	CloudFallback bool   `yaml:"cloud_fallback"`
+}
+
+// Tier2Spec returns the model that answers `next` and `pipeline`: tier2, or tier1 if tier2 is not set.
+func (m Model) Tier2Spec() string {
+	if m.Tier2 == "" {
+		return m.Tier1
+	}
+	return m.Tier2
+}
+
+// Providers holds the settings of the model providers.
+type Providers struct {
+	Ollama Ollama `yaml:"ollama"`
+}
+
+// Ollama is where the Ollama API is. Output of commands is sent there, so an address that is not
+// this machine's own counts as remote and its data is masked like data sent to a cloud.
+type Ollama struct {
+	BaseURL string `yaml:"base_url"`
 }
 
 type Privacy struct {
@@ -66,7 +90,8 @@ type Logging struct {
 // Default returns the configuration used for every key the file leaves out.
 func Default() Config {
 	return Config{
-		Model:      Model{Tier1: "ollama/llama3.1:8b", Tier2: "ollama/qwen2.5:14b"},
+		Model:      Model{Tier1: "ollama/llama3.1:8b"},
+		Providers:  Providers{Ollama: Ollama{BaseURL: "http://localhost:11434"}},
 		Privacy:    Privacy{MaskCredentials: true, MaskFlags: true},
 		Execution:  Execution{Mode: "propose", ConfirmDestructive: true},
 		Engagement: Engagement{ScaffoldFolders: true, AutoReport: true},
@@ -119,8 +144,11 @@ func (c Config) Validate() error {
 	if !modelRE.MatchString(c.Model.Tier1) {
 		add("model.tier1: %q is invalid (expected provider/model, e.g. ollama/llama3.1:8b)", c.Model.Tier1)
 	}
-	if !modelRE.MatchString(c.Model.Tier2) {
-		add("model.tier2: %q is invalid (expected provider/model, e.g. ollama/qwen2.5:14b)", c.Model.Tier2)
+	if c.Model.Tier2 != "" && !modelRE.MatchString(c.Model.Tier2) {
+		add("model.tier2: %q is invalid (expected provider/model, e.g. ollama/qwen2.5:14b, or empty to use tier1)", c.Model.Tier2)
+	}
+	if u, err := url.Parse(c.Providers.Ollama.BaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil {
+		add("providers.ollama.base_url: %q is invalid (expected an http or https URL such as http://localhost:11434)", c.Providers.Ollama.BaseURL)
 	}
 	oneOf("execution.mode", c.Execution.Mode, "propose", "approve-run")
 	oneOf("capture.trigger", c.Capture.Trigger, "shell-hooks", "pipe-pane")

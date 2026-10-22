@@ -177,6 +177,14 @@ func TestValidate(t *testing.T) {
 		{"approve-run", func(c *Config) { c.Execution.Mode = "approve-run" }, nil},
 		{"pipe-pane", func(c *Config) { c.Capture.Trigger = "pipe-pane" }, nil},
 		{"cloud model", func(c *Config) { c.Model.Tier2 = "anthropic/claude-fable-5-1" }, nil},
+		{"tier2 left empty", func(c *Config) { c.Model.Tier2 = "" }, nil},
+		{"another Ollama address", func(c *Config) { c.Providers.Ollama.BaseURL = "http://192.168.64.1:11434" }, nil},
+		{"https Ollama", func(c *Config) { c.Providers.Ollama.BaseURL = "https://ollama.example.com" }, nil},
+		{"empty address", func(c *Config) { c.Providers.Ollama.BaseURL = "" }, []string{"providers.ollama.base_url"}},
+		{"address without a scheme", func(c *Config) { c.Providers.Ollama.BaseURL = "localhost:11434" }, []string{"providers.ollama.base_url"}},
+		{"address with another scheme", func(c *Config) { c.Providers.Ollama.BaseURL = "ftp://localhost" }, []string{"providers.ollama.base_url"}},
+		{"address with a password", func(c *Config) { c.Providers.Ollama.BaseURL = "http://user:pw@localhost:11434" }, []string{"providers.ollama.base_url"}},
+		{"address without a host", func(c *Config) { c.Providers.Ollama.BaseURL = "http://" }, []string{"providers.ollama.base_url"}},
 		{
 			"bad mode", func(c *Config) { c.Execution.Mode = "run" },
 			[]string{`execution.mode: "run" is invalid`, `"propose", "approve-run"`},
@@ -380,5 +388,36 @@ func TestReportTemplate(t *testing.T) {
 				t.Errorf("ReportTemplate = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestTier2FallsBackToTier1(t *testing.T) {
+	m := Model{Tier1: "ollama/llama3.1:8b"}
+	if got := m.Tier2Spec(); got != "ollama/llama3.1:8b" {
+		t.Errorf("Tier2Spec() = %q, want tier1", got)
+	}
+	m.Tier2 = "ollama/qwen2.5:14b"
+	if got := m.Tier2Spec(); got != "ollama/qwen2.5:14b" {
+		t.Errorf("Tier2Spec() = %q, want tier2", got)
+	}
+}
+
+func TestDefaultsChooseOneModelAndALocalOllama(t *testing.T) {
+	d := Default()
+	if d.Model.Tier1 != "ollama/llama3.1:8b" || d.Model.Tier2 != "" || d.Providers.Ollama.BaseURL != "http://localhost:11434" {
+		t.Errorf("defaults = %+v %+v", d.Model, d.Providers)
+	}
+}
+
+func TestOllamaAddressFromTheFile(t *testing.T) {
+	cfg, err := parse([]byte("providers:\n  ollama:\n    base_url: http://192.168.64.1:11434\n"), "t.yaml")
+	if err != nil || cfg.Providers.Ollama.BaseURL != "http://192.168.64.1:11434" {
+		t.Errorf("%+v, %v", cfg.Providers, err)
+	}
+	if _, err := parse([]byte("providers:\n  ollama:\n    url: x\n"), "t.yaml"); err == nil {
+		t.Error("an unknown key under providers.ollama was accepted")
+	}
+	if cfg, err := parse([]byte("model:\n  tier2: \"\"\n"), "t.yaml"); err != nil || cfg.Model.Tier2 != "" {
+		t.Errorf("%+v, %v", cfg.Model, err)
 	}
 }
