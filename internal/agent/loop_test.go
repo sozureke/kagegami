@@ -420,7 +420,10 @@ func TestRunStopsAWorkerThatIsWaitingForTheModel(t *testing.T) {
 	waitFor(t, func() bool { return slow.started() == 1 })
 	cancel()
 	select {
-	case <-done:
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("err = %v", err)
+		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("Run did not stop although the context is done")
 	}
