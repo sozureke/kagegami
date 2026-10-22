@@ -10,15 +10,22 @@ commands:
   watch:
     short: Open the side panel next to your terminal (tmux)
     long: |-
-      The side panel: one stream of what you run and what Kagegami made of it, with the map, the
-      pipeline and the help one key away (m, p, ?).
+      The side panel: one stream of what you run and what Kagegami made of it, with the help one
+      key away (?). It opens with the animation of the splash: section of the config file.
 
-      The panel that watches your shell in a tmux split is not ready yet. For now:
+      It is not connected to your shell or to a case yet, so the stream stays empty for now.
+      q quits.
+  splash:
+    short: Play the opening animation, to tune it
+    long: |-
+      Play the opening animation of the panel with the settings of the `splash:` section of the
+      config file (see `kagegami init`), so that a change can be seen at once:
 
-          kagegami watch --demo
+          kagegami splash
+          kagegami splash --loop
 
-      plays a made-up session in this terminal, so that the look and the keys can be tried.
-      Press n for a (made-up) suggestion, q to quit.
+      Edit the config, run it again, and when it looks right leave it: the panel plays the same
+      animation when it starts. The art is shrunk to fit the terminal on its own. Any key stops it.
   hook:
     short: Print the shell hook that lets Kagegami see where commands start and end
     long: |-

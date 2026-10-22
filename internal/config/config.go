@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"go.yaml.in/yaml/v3"
+
+	"github.com/sozureke/kagegami/internal/splash"
 )
 
 var ErrNotFound = errors.New("config file not found")
@@ -27,6 +29,7 @@ type Config struct {
 	Phases     map[string]Phase `yaml:"phases"`
 	Capture    Capture          `yaml:"capture"`
 	Logging    Logging          `yaml:"logging"`
+	Splash     splash.Config    `yaml:"splash"`
 }
 
 // Model names the models, as provider/model. The person chooses them: tier1 reads the output of
@@ -107,6 +110,7 @@ func Default() Config {
 		Phases:     map[string]Phase{},
 		Capture:    Capture{Trigger: "shell-hooks", Ignore: []string{"cd", "ls", "clear", "pwd"}},
 		Logging:    Logging{Level: "info"},
+		Splash:     splash.DefaultConfig(),
 	}
 }
 
@@ -165,8 +169,15 @@ func (c Config) Validate() error {
 	oneOf("execution.mode", c.Execution.Mode, "propose", "approve-run")
 	oneOf("capture.trigger", c.Capture.Trigger, "shell-hooks", "pipe-pane")
 	oneOf("logging.level", c.Logging.Level, "debug", "info", "warn", "error")
+	if err := c.Splash.Validate(); err != nil {
+		add("splash:\n%s", indent(err.Error()))
+	}
 
 	return errors.Join(errs...)
+}
+
+func indent(s string) string {
+	return "  " + strings.ReplaceAll(s, "\n", "\n  ")
 }
 
 func quoteJoin(items []string) string {

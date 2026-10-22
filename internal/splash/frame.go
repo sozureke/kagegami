@@ -2,6 +2,7 @@ package splash
 
 import (
 	"math"
+	"strings"
 )
 
 // Cell is one character of a frame with its colour. A space has no colour.
@@ -29,8 +30,9 @@ func Frame(s *State, cfg Config) [][]Cell {
 	}
 	base, err := ParseColor(cfg.Color)
 	if err != nil {
-		base = presets["green"]
+		base = presets[ColorChrome]
 	}
+	chrome := strings.EqualFold(strings.TrimSpace(cfg.Color), ColorChrome)
 	k := cfg.Glitch / 100
 
 	// brightness of each cell, kept apart from the colour until the end
@@ -82,6 +84,9 @@ func Frame(s *State, cfg Config) [][]Cell {
 				f *= s.vignette(cfg, x, y)
 			}
 			tint := base
+			if chrome {
+				tint = chromeAt(float64(y) / float64(max(s.h-1, 1)))
+			}
 			if c.RGB == ghostRed || c.RGB == ghostCyan {
 				tint = c.RGB
 			}
@@ -167,6 +172,8 @@ func pick(set []rune, seed uint64, a, b, c, salt int) rune {
 	return set[mix(seed, a, b, c, salt)%uint64(len(set))]
 }
 
-func scale(c uint8, f float64) uint8 {
-	return uint8(math.Min(255, math.Max(0, math.Round(float64(c)*f)))) //nolint:gosec // clamped to 0..255 just above
+func scale(c uint8, f float64) uint8 { return toByte(float64(c) * f) }
+
+func toByte(v float64) uint8 {
+	return uint8(math.Min(255, math.Max(0, math.Round(v)))) //nolint:gosec // clamped to 0..255 just above
 }

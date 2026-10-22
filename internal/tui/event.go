@@ -37,8 +37,6 @@ type Event struct {
 	Turn *Turn
 	// Block names a block (map, pipeline, help), so that its key can remove it again.
 	Block string
-	// Lines are the lines of a block, already styled; build makes them again when a spinner in
-	// the block has moved on.
+	// Lines are the lines of a block, already styled.
 	Lines []string
-	build func(spin int) []string
 }

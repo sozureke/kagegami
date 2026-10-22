@@ -49,7 +49,7 @@ func run(ctx context.Context, art string, cfg Config, in io.Reader, out, errOut 
 	if hint := colorHint(profile, env); hint != "" {
 		hintOnce.Do(func() { fmt.Fprintln(errOut, hint) })
 	}
-	m := &model{art: art, cfg: cfg, state: NewState(art, cfg), width: 80, height: 24}
+	m := &model{art: art, cfg: cfg}
 	_, err := tea.NewProgram(m, tea.WithContext(ctx), tea.WithInput(in), tea.WithOutput(out), tea.WithColorProfile(profile), tea.WithFPS(cfg.FPS)).Run()
 	return err
 }
@@ -58,10 +58,15 @@ type tickMsg struct{}
 
 // model is the Bubble Tea side of the animation: a timer that steps the state, and a view.
 type model struct {
-	art           string
-	cfg           Config
+	art string
+	cfg Config
+	// state is nil until the size of the terminal is known: the art is fitted to it first.
 	state         *State
+	fitted        string
 	width, height int
+	// seed is kept so that a resize does not change the glitches
+	seed uint64
+	wait int
 }
 
 func (m *model) tick() tea.Cmd {
@@ -70,19 +75,46 @@ func (m *model) tick() tea.Cmd {
 
 func (m *model) Init() tea.Cmd { return m.tick() }
 
+// fit fits the art to a terminal of this size. A state that was already running is rebuilt and
+// brought to the same frame, so a resize does not restart the animation.
+func (m *model) fit(width, height int) {
+	m.width, m.height = width, height
+	cfg := m.cfg
+	cfg.Seed = m.seed
+	m.fitted = Fit(m.art, width, height, cfg)
+	old := m.state
+	m.state = NewState(m.fitted, cfg)
+	m.seed = m.state.Seed()
+	if old != nil {
+		for range old.tick {
+			m.state.Step(cfg)
+		}
+	}
+}
+
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		return m, tea.Quit
 	case tea.WindowSizeMsg:
-		m.width, m.height = msg.Width, msg.Height
+		if m.state == nil || msg.Width != m.width || msg.Height != m.height {
+			m.fit(msg.Width, msg.Height)
+		}
 	case tickMsg:
+		if m.state == nil {
+			// no size has come yet; after a second, go on with a common one
+			if m.wait++; m.wait >= m.cfg.FPS {
+				m.fit(80, 24)
+			}
+			return m, m.tick()
+		}
 		m.state.Step(m.cfg)
 		if m.state.Done() {
 			if !m.cfg.Loop {
 				return m, tea.Quit
 			}
-			m.state = NewState(m.art, m.cfg)
+			m.state = NewState(m.fitted, m.cfg) // a seed of 0 gives the next round its own glitches
+			m.seed = m.state.Seed()
 		}
 		return m, m.tick()
 	}
@@ -90,7 +122,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) View() tea.View {
-	v := tea.NewView(render(Frame(m.state, m.cfg), m.width, m.height))
+	content := ""
+	if m.state != nil {
+		content = render(Frame(m.state, m.cfg), m.width, m.height)
+	}
+	v := tea.NewView(content)
 	v.AltScreen = true
 	return v
 }

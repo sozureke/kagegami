@@ -42,7 +42,7 @@ func TestRun(t *testing.T) {
 		{"unknown command", []string{"foo"}, 2, "", "unknown command"},
 		{"unknown flag", []string{"watch", "--bogus"}, 2, "", "unknown flag"},
 		{"extra argument", []string{"version", "extra"}, 2, "", "unknown command"},
-		{"stub is not implemented", []string{"watch"}, 1, "", "not implemented yet"},
+		{"stub is not implemented", []string{"report"}, 1, "", "not implemented yet"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -61,7 +61,7 @@ func TestRun(t *testing.T) {
 }
 
 func TestStubWritesNothingToStdout(t *testing.T) {
-	_, stdout, _ := runCLI(t, "watch")
+	_, stdout, _ := runCLI(t, "report")
 	if stdout != "" {
 		t.Errorf("stdout = %q, want empty", stdout)
 	}
@@ -434,12 +434,19 @@ func TestNextAndPipelineFlags(t *testing.T) {
 	}
 }
 
-func TestWatchDemoNeedsATerminal(t *testing.T) {
-	code, stdout, stderr := runCLI(t, "watch", "--demo", "--no-anim")
+func TestWatchNeedsATerminal(t *testing.T) {
+	code, stdout, stderr := runCLI(t, "watch", "--no-anim")
 	if code != 1 || stdout != "" || !strings.Contains(stderr, "needs a terminal") {
 		t.Errorf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	if code, _, stderr := runCLI(t, "watch"); code != 1 || !strings.Contains(stderr, "--demo") {
-		t.Errorf("without --demo the error must point to it: code=%d stderr=%q", code, stderr)
+	if code, _, stderr := runCLI(t, "watch", "--demo"); code != 2 || !strings.Contains(stderr, "unknown flag") {
+		t.Errorf("--demo is gone: code=%d stderr=%q", code, stderr)
+	}
+}
+
+func TestSplashNeedsATerminal(t *testing.T) {
+	code, stdout, stderr := runCLI(t, "splash", "--loop")
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "needs a terminal") {
+		t.Errorf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
 }

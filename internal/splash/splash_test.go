@@ -298,6 +298,7 @@ func TestGlitchZeroTurnsEveryGlitchOff(t *testing.T) {
 
 func TestRGBSplitDrawsGhostsOnlyOnGlitchingRows(t *testing.T) {
 	cfg := seeded(13)
+	cfg.Color = "green" // no red in it, so a red cell can only be a ghost
 	cfg.Glitch, cfg.RGBSplit = 100, 100
 	cfg.HoldSec, cfg.TotalMaxSec = 10, 30
 	s := NewState(testArt, cfg)
@@ -324,6 +325,7 @@ func TestRGBSplitDrawsGhostsOnlyOnGlitchingRows(t *testing.T) {
 func TestScanlinesAndVignetteDarken(t *testing.T) {
 	art := strings.Repeat(strings.Repeat("#", 21)+"\n", 7)
 	cfg := seeded(14)
+	cfg.Color = "green" // one flat colour, so only the brightness differs
 	cfg.Glitch, cfg.PulseFreq, cfg.RGBSplit = 0, 0, 0
 	cfg.HoldSec, cfg.TotalMaxSec = 5, 20
 	settle := func(c Config) [][]Cell {
@@ -397,8 +399,9 @@ func TestDefaultsAreTheDocumentedOnesAndValid(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := Config{
-		Speed: 1.8, FPS: 30, Rings: 6, Pulse: 5, Fade: 12, Jitter: 2, CenterX: 50, CenterY: 50, PulseFreq: 35, PulseSpeed: 40, PulseWidth: 18,
-		Glitch: 55, RGBSplit: 50, Scanlines: true, Vignette: true, CellAspect: 0.5, FadeOutSec: 1.2, HoldSec: 2, TotalMaxSec: 6, Color: "#39ff14", Mode: "fade",
+		Enabled: true, Scale: 1, Fit: true, Speed: 1.5, FPS: 24, Rings: 4, Pulse: 8, Fade: 22, Jitter: 3, CenterX: 50, CenterY: 50,
+		PulseFreq: 25, PulseSpeed: 25, PulseWidth: 30, Glitch: 70, RGBSplit: 40, Scanlines: true, Vignette: true, CellAspect: 0.5,
+		FadeOutSec: 1.5, HoldSec: 4, TotalMaxSec: 8, Color: "chrome", Mode: "fade",
 	}
 	if c != want {
 		t.Errorf("defaults = %+v", c)
@@ -415,29 +418,6 @@ func TestValidateNamesEveryProblem(t *testing.T) {
 	for _, field := range []string{"speed", "fps", "rings", "fade", "glitch", "mode", "color"} {
 		if !strings.Contains(err.Error(), field) {
 			t.Errorf("the error does not mention %q: %v", field, err)
-		}
-	}
-}
-
-func TestLoadYAML(t *testing.T) {
-	c, err := LoadYAML([]byte("glitch: 80\ncolor: cyan\nloop: true\nmode: decode\nseed: 7\n"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	def := DefaultConfig()
-	if c.Glitch != 80 || c.Color != "cyan" || !c.Loop || c.Mode != ModeDecode || c.Seed != 7 || c.Speed != def.Speed || c.Rings != def.Rings {
-		t.Errorf("config = %+v", c)
-	}
-	if c, err := LoadYAML(nil); err != nil || c != def {
-		t.Errorf("an empty file keeps the defaults: %v", err)
-	}
-	for name, in := range map[string]string{
-		"a misspelt field": "glich: 80\n",
-		"a bad value":      "glitch: 500\n",
-		"a wrong type":     "fps: fast\n",
-	} {
-		if _, err := LoadYAML([]byte(in)); err == nil {
-			t.Errorf("%s was accepted", name)
 		}
 	}
 }
@@ -461,7 +441,7 @@ func TestColorHintIsGivenOnlyWithoutTrueColourAndMentionsTmuxInsideIt(t *testing
 
 func TestAnyKeyEndsTheAnimationAndItEndsByItselfWithNoTimerLeft(t *testing.T) {
 	cfg := seeded(1)
-	m := &model{art: testArt, cfg: cfg, state: NewState(testArt, cfg), width: 40, height: 12}
+	m := &model{art: testArt, cfg: cfg, state: NewState(testArt, cfg), fitted: testArt, width: 40, height: 12}
 	if m.Init() == nil {
 		t.Fatal("the animation starts a timer")
 	}
@@ -471,7 +451,7 @@ func TestAnyKeyEndsTheAnimationAndItEndsByItselfWithNoTimerLeft(t *testing.T) {
 		t.Error("a key must quit")
 	}
 
-	m = &model{art: testArt, cfg: cfg, state: NewState(testArt, cfg), width: 40, height: 12}
+	m = &model{art: testArt, cfg: cfg, state: NewState(testArt, cfg), fitted: testArt, width: 40, height: 12}
 	var last tea.Cmd
 	for i := 0; i < 10_000 && !m.state.Done(); i++ {
 		_, last = m.Update(tickMsg{})
@@ -487,7 +467,7 @@ func TestAnyKeyEndsTheAnimationAndItEndsByItselfWithNoTimerLeft(t *testing.T) {
 func TestLoopStartsAgainInsteadOfQuitting(t *testing.T) {
 	cfg := seeded(1)
 	cfg.Loop = true
-	m := &model{art: testArt, cfg: cfg, state: NewState(testArt, cfg), width: 40, height: 12}
+	m := &model{art: testArt, cfg: cfg, state: NewState(testArt, cfg), fitted: testArt, width: 40, height: 12}
 	first, restarted := m.state, false
 	for i := 0; i < 10_000 && !restarted; i++ {
 		_, cmd := m.Update(tickMsg{})
@@ -534,5 +514,39 @@ func TestRunPlaysInAFakeTerminalAndStopsOnContextCancel(t *testing.T) {
 	t.Logf("run returned: %v", <-done) // it must return: a cancelled context ends the program
 	if err := run(context.Background(), testArt, Config{}, strings.NewReader(""), &out, &errOut, nil); err == nil {
 		t.Error("an invalid config must be refused before anything is drawn")
+	}
+}
+
+func TestChromeShadesTheArtFromTopToBottom(t *testing.T) {
+	if chromeAt(0) != (RGB{0xff, 0xff, 0xff}) || chromeAt(1) != (RGB{0x7a, 0x80, 0x8c}) {
+		t.Errorf("ends = %v, %v", chromeAt(0), chromeAt(1))
+	}
+	if chromeAt(-1) != chromeAt(0) || chromeAt(2) != chromeAt(1) {
+		t.Error("outside 0..1 the shading stays at its ends")
+	}
+	if a, b := chromeAt(0.5), chromeAt(0.62); a.G >= b.G {
+		t.Error("there is a second, brighter reflection under the dark band")
+	}
+	for at := 0.0; at <= 1; at += 0.05 {
+		c := chromeAt(at)
+		if int(c.B)-int(c.R) < 0 || int(c.B)-int(c.R) > 24 {
+			t.Errorf("at %.2f %v is not a cool, near-neutral grey", at, c)
+		}
+	}
+
+	art := strings.Repeat(strings.Repeat("#", 9)+"\n", 9)
+	cfg := seeded(16)
+	cfg.Glitch, cfg.PulseFreq, cfg.RGBSplit, cfg.Scanlines, cfg.Vignette = 0, 0, 0, false, false
+	cfg.HoldSec, cfg.TotalMaxSec = 5, 20
+	s := NewState(art, cfg)
+	for s.t < s.appearT {
+		s.Step(cfg)
+	}
+	f := Frame(s, cfg)
+	if f[0][4].RGB != chromeAt(0) || f[8][4].RGB != chromeAt(1) || f[0][0].RGB != f[0][8].RGB {
+		t.Errorf("rows are not shaded by height: top %v, bottom %v", f[0][4].RGB, f[8][4].RGB)
+	}
+	if _, err := ParseColor("Chrome"); err != nil {
+		t.Error(err)
 	}
 }
