@@ -40,6 +40,13 @@ a plain nmap output as a control; `long-unknown`, a long output of an unknown to
 interest is in the middle, further from both ends than the 6 KiB head and 2 KiB tail the model is
 given; and five outputs that try to hijack the model.
 
+`long-unknown` failed in the first full run (llama3.1:8b did not find the open port 6379 with or
+without the worked example): the line was never in what the model was shown. Tier 1 now folds long
+runs of lines that differ only in their numbers before it cuts to the head and the tail
+(`internal/agent/collapse.go`), and the same case passes. The cost is that the numbers of the folded
+lines are lost: if a long list of open ports comes in one shape, the model sees the first three,
+the last one and a count. The raw output stays on disk.
+
 ## What the numbers mean
 
 - **usable**: the run ended with an answer that passed the checks in code (`advice.Context` for

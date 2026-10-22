@@ -86,7 +86,12 @@ func (t *Tier1) Extract(ctx context.Context, command string, exitCode int, outpu
 	if opts.MaxTokens <= 0 {
 		opts.MaxTokens = DefaultTier1Options().MaxTokens
 	}
-	shown := headTail(output, opts.Head, opts.Tail)
+	shown := output
+	if len(shown) > opts.Head+opts.Tail {
+		// Fold the runs of near-identical lines before cutting: the line that matters in a long
+		// log is rarely in the first or the last few kilobytes, but it is not like its neighbours.
+		shown = headTail(collapse(shown), opts.Head, opts.Tail)
+	}
 	cmd := cleanCommand(command)
 
 	var res Tier1Result
