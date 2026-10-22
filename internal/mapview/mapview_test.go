@@ -247,3 +247,64 @@ func TestLoadIsStable(t *testing.T) {
 		t.Error("two reads of the same map differ")
 	}
 }
+
+func TestStatsShowWhatTheModelsUsed(t *testing.T) {
+	st := openStore(t)
+	for _, u := range []store.Usage{
+		{Tier: "tier1", Model: "ollama/llama3.1:8b", PromptTokens: 700, CompletionTokens: 90, OK: true},
+		{Tier: "tier1", Model: "ollama/llama3.1:8b", PromptTokens: 300, CompletionTokens: 0, OK: false},
+		{Tier: "tier2", Model: "ollama/llama3.1:8b", PromptTokens: 2000, CompletionTokens: 400, OK: true},
+	} {
+		if err := st.Repo().AddUsage(bg, u); err != nil {
+			t.Fatal(err)
+		}
+	}
+	v, err := Load(bg, st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var plain, stats bytes.Buffer
+	if err := Text(&plain, v, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(plain.String(), "tokens") {
+		t.Errorf("usage is shown without --stats:\n%s", plain.String())
+	}
+	if err := Text(&stats, v, Options{Stats: true}); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"Model use on this case",
+		"tier1  ollama/llama3.1:8b",
+		"2 calls, 1 without a usable answer: 1000 prompt + 90 answer = 1090 tokens",
+		"tier2  ollama/llama3.1:8b",
+		"1 calls: 2000 prompt + 400 answer = 2400 tokens",
+	} {
+		if !strings.Contains(stats.String(), want) {
+			t.Errorf("%q is missing from:\n%s", want, stats.String())
+		}
+	}
+	var js bytes.Buffer
+	if err := JSON(&js, v); err != nil {
+		t.Fatal(err)
+	}
+	var back struct {
+		Usage []Usage `json:"usage"`
+	}
+	if err := json.Unmarshal(js.Bytes(), &back); err != nil || len(back.Usage) != 2 || back.Usage[0].PromptTokens != 1000 || back.Usage[0].Failed != 1 {
+		t.Errorf("json usage = %+v, %v", back.Usage, err)
+	}
+}
+
+func TestStatsOfACaseWithoutModelsAndOfAnEmptyMap(t *testing.T) {
+	st := openStore(t)
+	if got := render(t, st, Options{Stats: true}); got != "The map is empty.\n\nModel use on this case\n  no model has been used\n" {
+		t.Errorf("got %q", got)
+	}
+	v, _ := Load(bg, st)
+	var js bytes.Buffer
+	_ = JSON(&js, v)
+	if !strings.Contains(js.String(), `"usage": []`) {
+		t.Errorf("an empty list of usage must be a list:\n%s", js.String())
+	}
+}

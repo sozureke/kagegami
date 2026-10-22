@@ -21,6 +21,7 @@ func newMapCmd() *cobra.Command {
 		caseName string
 		asJSON   bool
 		all      bool
+		stats    bool
 	)
 	cmd := &cobra.Command{
 		Use:   "map",
@@ -57,11 +58,12 @@ func newMapCmd() *cobra.Command {
 			if asJSON {
 				return mapview.JSON(cmd.OutOrStdout(), view)
 			}
-			return mapview.Text(cmd.OutOrStdout(), view, mapview.Options{All: all})
+			return mapview.Text(cmd.OutOrStdout(), view, mapview.Options{All: all, Stats: stats})
 		},
 	}
 	cmd.Flags().StringVar(&caseName, "case", "", "the case to show (needed when there is more than one)")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "print the whole map as JSON")
+	cmd.Flags().BoolVar(&stats, "stats", false, "show what the models have used on the case")
 	cmd.Flags().BoolVar(&all, "all", false, "show closed ports, every path and every note")
 	return cmd
 }

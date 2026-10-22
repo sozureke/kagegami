@@ -13,6 +13,8 @@ import (
 type Options struct {
 	// All shows closed and filtered ports, every path and every note.
 	All bool
+	// Stats adds what the models have used.
+	Stats bool
 }
 
 const (
@@ -34,7 +36,9 @@ func Text(w io.Writer, v View, o Options) error {
 	b := &builder{}
 	if len(v.Hosts) == 0 && len(v.Findings) == 0 && len(v.Credentials) == 0 && len(v.Notes) == 0 {
 		b.line("The map is empty.")
-		return b.flush(w)
+		if !o.Stats {
+			return b.flush(w)
+		}
 	}
 	for _, h := range v.Hosts {
 		b.line("%s  %s  %s  [%s]", clean(h.IP), dash(clean(h.Hostname)), dash(clean(h.OS)), clean(h.Status))
@@ -102,6 +106,20 @@ func Text(w io.Writer, v View, o Options) error {
 				text = shorten(text, maxNoteWidth)
 			}
 			b.line("  · %s", text)
+		}
+	}
+	if o.Stats {
+		b.line("")
+		b.line("Model use on this case")
+		if len(v.Usage) == 0 {
+			b.line("  no model has been used")
+		}
+		for _, u := range v.Usage {
+			failed := ""
+			if u.Failed > 0 {
+				failed = fmt.Sprintf(", %d without a usable answer", u.Failed)
+			}
+			b.line("  %-6s %-34s %4d calls%s: %d prompt + %d answer = %d tokens", clean(u.Tier), clean(u.Model), u.Calls, failed, u.PromptTokens, u.CompletionTokens, u.PromptTokens+u.CompletionTokens)
 		}
 	}
 	return b.flush(w)

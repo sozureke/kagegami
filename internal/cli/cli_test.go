@@ -237,3 +237,24 @@ func TestMapWithoutAnyCase(t *testing.T) {
 		t.Errorf("code %d, stderr %q", code, stderr)
 	}
 }
+
+func TestMapStats(t *testing.T) {
+	home := t.TempDir()
+	caseWithHost(t, home, "stats")
+	st, err := store.Open(context.Background(), filepath.Join(home, "data", "cases", "stats", store.FileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Repo().AddUsage(context.Background(), store.Usage{Tier: "tier1", Model: "ollama/llama3.1:8b", PromptTokens: 12, CompletionTokens: 3, OK: true}); err != nil {
+		t.Fatal(err)
+	}
+	_ = st.Close()
+
+	code, stdout, stderr := runCLI(t, "map", "--stats")
+	if code != 0 || stderr != "" || !strings.Contains(stdout, "12 prompt + 3 answer = 15 tokens") {
+		t.Errorf("code %d, stderr %q, stdout:\n%s", code, stderr, stdout)
+	}
+	if _, stdout, _ := runCLI(t, "map"); strings.Contains(stdout, "tokens") {
+		t.Errorf("--stats is off by default:\n%s", stdout)
+	}
+}

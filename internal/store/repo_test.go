@@ -614,3 +614,52 @@ func TestInTxHonoursCancelledContext(t *testing.T) {
 		t.Errorf("err = %v, want context.Canceled", err)
 	}
 }
+
+func TestUsage(t *testing.T) {
+	st, _ := openTemp(t)
+	r := st.Repo()
+	for _, u := range []Usage{
+		{Tier: "tier1", Model: "ollama/llama3.1:8b", PromptTokens: 100, CompletionTokens: 20, OK: true},
+		{Tier: "tier1", Model: "ollama/llama3.1:8b", PromptTokens: 50, CompletionTokens: 0, OK: false},
+		{Tier: "tier2", Model: "ollama/llama3.1:8b", PromptTokens: 1000, CompletionTokens: 300, OK: true},
+		{Tier: "tier1", Model: "ollama/other:7b", PromptTokens: 5, CompletionTokens: 5, OK: true},
+	} {
+		if err := r.AddUsage(context.Background(), u); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := r.UsageTotals(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []UsageTotal{
+		{Tier: "tier1", Model: "ollama/llama3.1:8b", Calls: 2, Failed: 1, PromptTokens: 150, CompletionTokens: 20},
+		{Tier: "tier1", Model: "ollama/other:7b", Calls: 1, PromptTokens: 5, CompletionTokens: 5},
+		{Tier: "tier2", Model: "ollama/llama3.1:8b", Calls: 1, PromptTokens: 1000, CompletionTokens: 300},
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("totals = %+v\nwant     %+v", got, want)
+	}
+	fresh, _ := openTemp(t)
+	if none, err := fresh.Repo().UsageTotals(context.Background()); err != nil || len(none) != 0 {
+		t.Errorf("an unused case: %v, %v", none, err)
+	}
+}
+
+func TestUsageRefusesNonsense(t *testing.T) {
+	st, _ := openTemp(t)
+	for name, u := range map[string]Usage{
+		"unknown tier":    {Tier: "tier3", Model: "m"},
+		"empty tier":      {Model: "m"},
+		"no model":        {Tier: "tier1"},
+		"negative prompt": {Tier: "tier1", Model: "m", PromptTokens: -1},
+		"negative answer": {Tier: "tier1", Model: "m", CompletionTokens: -1},
+	} {
+		if err := st.Repo().AddUsage(context.Background(), u); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: err = %v", name, err)
+		}
+	}
+	if totals, _ := st.Repo().UsageTotals(context.Background()); len(totals) != 0 {
+		t.Errorf("rejected usage was stored: %+v", totals)
+	}
+}

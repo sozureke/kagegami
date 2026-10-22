@@ -177,6 +177,8 @@ func TestValidate(t *testing.T) {
 		{"approve-run", func(c *Config) { c.Execution.Mode = "approve-run" }, nil},
 		{"pipe-pane", func(c *Config) { c.Capture.Trigger = "pipe-pane" }, nil},
 		{"cloud model", func(c *Config) { c.Model.Tier2 = "anthropic/claude-fable-5-1" }, nil},
+		{"no ceiling", func(c *Config) { c.Limits.SessionTokens = 0 }, nil},
+		{"negative ceiling", func(c *Config) { c.Limits.SessionTokens = -1 }, []string{"limits.session_tokens"}},
 		{"tier2 left empty", func(c *Config) { c.Model.Tier2 = "" }, nil},
 		{"another Ollama address", func(c *Config) { c.Providers.Ollama.BaseURL = "http://192.168.64.1:11434" }, nil},
 		{"https Ollama", func(c *Config) { c.Providers.Ollama.BaseURL = "https://ollama.example.com" }, nil},
@@ -404,6 +406,9 @@ func TestTier2FallsBackToTier1(t *testing.T) {
 
 func TestDefaultsChooseOneModelAndALocalOllama(t *testing.T) {
 	d := Default()
+	if d.Limits.SessionTokens != 1_000_000 {
+		t.Errorf("the session ceiling is %d, want 1000000: a ceiling is on by default", d.Limits.SessionTokens)
+	}
 	if d.Model.Tier1 != "ollama/llama3.1:8b" || d.Model.Tier2 != "" || d.Providers.Ollama.BaseURL != "http://localhost:11434" {
 		t.Errorf("defaults = %+v %+v", d.Model, d.Providers)
 	}

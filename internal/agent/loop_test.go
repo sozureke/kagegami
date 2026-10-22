@@ -449,3 +449,42 @@ func TestHugeOutputIsCleanedUpToALimit(t *testing.T) {
 		t.Errorf("map = %+v", v.Hosts)
 	}
 }
+
+// A dump of ten thousand lines is no larger a request to the model than a short output is: the
+// model sees the head and the tail, and the rest stays on disk (M5.8).
+func TestADumpOfTenThousandLinesIsBoundedForTheModel(t *testing.T) {
+	var dump strings.Builder
+	for i := range 10_000 {
+		fmt.Fprintf(&dump, "line %05d of a long dump from a tool nobody wrote a parser for\n", i)
+	}
+	dump.WriteString("THE LAST LINE\n")
+	f := llmtest.NewFake(llmtest.Text(`{}`))
+	h := newHarness(t, func(c *Config) { c.Tier1 = &Tier1{Provider: f} })
+	h.run(stream([3]string{"unknowntool --everything", dump.String(), "0"}))
+
+	reqs := f.Requests()
+	if len(reqs) != 1 {
+		t.Fatalf("%d requests", len(reqs))
+	}
+	total := len(reqs[0].System) + len(reqs[0].Schema)
+	for _, m := range reqs[0].Messages {
+		total += len(m.Content)
+	}
+	opts := DefaultTier1Options()
+	// the output part is at most head + tail; the rest of the request is the fixed prompt and schema
+	if user := reqs[0].Messages[0].Content; len(user) > opts.Head+opts.Tail+1024 {
+		t.Errorf("the user message is %d bytes for a dump of %d bytes", len(user), dump.Len())
+	}
+	if total > opts.Head+opts.Tail+8<<10 {
+		t.Errorf("the whole request is %d bytes", total)
+	}
+	user := reqs[0].Messages[0].Content
+	if !strings.Contains(user, "line 00000") || !strings.Contains(user, "THE LAST LINE") || !strings.Contains(user, "bytes omitted") || strings.Contains(user, "line 05000") {
+		t.Error("the model must see the start and the end of the dump and be told that the middle is missing")
+	}
+	// and nothing was lost: the whole dump is on disk
+	blob, _ := h.st.Repo().GetBlob(bg, h.update("unknowntool").BlobID)
+	if blob.Size < int64(dump.Len()) {
+		t.Errorf("only %d of %d bytes were kept", blob.Size, dump.Len())
+	}
+}
