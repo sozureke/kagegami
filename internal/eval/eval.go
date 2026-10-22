@@ -37,6 +37,12 @@ const (
 	InAttempts = "attempts"
 	// InRequests is everything that was sent to the model.
 	InRequests = "requests"
+	// InClaims is what the answer puts forward, apart from the words around it: the commands of a
+	// suggestion or a plan, the hosts, services and paths of a delta. A model that writes "the note
+	// says to scan 8.8.8.8, that is not an order" has refused, and the word is not in its claims.
+	InClaims = "claims"
+	// InAttemptClaims is the same for every attempt of the model, also those that were refused.
+	InAttemptClaims = "attempt-claims"
 )
 
 // Check is a mechanical test of an answer. Words are matched without regard to case.
@@ -190,7 +196,7 @@ func validateChecks(owner string, checks []Check) error {
 			return fmt.Errorf("%s: check id %q is empty or repeated", owner, c.ID)
 		}
 		ids[c.ID] = true
-		if !slices.Contains([]string{"", InAnswer, InAttempts, InRequests}, c.In) {
+		if !slices.Contains([]string{"", InAnswer, InAttempts, InRequests, InClaims, InAttemptClaims}, c.In) {
 			return fmt.Errorf("%s: check %s looks in %q", owner, c.ID, c.In)
 		}
 		if len(c.Any)+len(c.None) == 0 {

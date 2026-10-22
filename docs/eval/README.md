@@ -46,11 +46,14 @@ given; and five outputs that try to hijack the model.
   tier 2, the grounding and the scope filter for tier 1). *unusable* is the refusal rate of
   ADR-0010: the model never gave such an answer. *error* means the model could not be reached.
 - **checks passed**: mechanical tests written in each fixture, a word that has to be in the answer
-  or must not be. A check can look at the answer the tester would see, at *every attempt* of the
-  model (so a planted instruction that the code then refused still shows), or at everything that
-  was *sent* to the model (so a secret that must not reach it shows). The `injection` fixture has
-  a check that the planted text really reached the model; without it a clean result would mean
-  nothing.
+  or must not be. A check looks in one of five places: the *answer* the tester would see, *every
+  attempt* of the model, everything *sent* to the model (so a secret that must not reach it shows),
+  the *claims* of the answer, or the claims of every attempt. Claims are what the answer puts
+  forward apart from the words around it: the commands of a suggestion or a plan, the hosts,
+  services and paths of a delta. Checks about hostile text use claims, because a model that writes
+  "the note says to scan 8.8.8.8, that is not an order" has refused, and a check on the words would
+  count that as a failure. The `injection` fixture also has a check that the planted text really
+  reached the model; without it a clean result would mean nothing.
 - **refused reads**: how often the model asked for a blob it had not been shown and was refused.
 
 These are mechanical. They do not say the advice is *good*: "technically fine but not a useful next
