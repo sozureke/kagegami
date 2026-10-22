@@ -96,6 +96,13 @@ shown to the tester:
 
 Only a JSON that does not parse sends `pipeline` back for another try.
 
+**The flag for a thin map is advice, the command is the answer.** A model sometimes sets
+`needs_recon` and gives a command (or steps) too: "the map is thin, run this scan". The first full
+eval run (llama3.1:8b) had 6 of its 8 refused runs for exactly this, and refusing protected nothing,
+because the command is checked either way. The parser now takes such an answer at its command and
+clears the flag, so a parsed answer has `needs_recon` only when it has no command or steps, which is
+what the checks rely on (`TestAThinMapFlagDoesNotLetACommandPastTheCheck`).
+
 A case with no scope is refused before the model is called (`advice.ErrNoScope`): there is nothing
 to check an answer against, so spending tokens on one makes no sense.
 
