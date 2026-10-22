@@ -1,0 +1,66 @@
+{
+  "name": "ssh-only",
+  "description": "One open port after a default scan (top 1000 TCP). No web service.",
+  "case": {
+    "target": "10.10.11.8",
+    "goal": "find a way in",
+    "scope": [
+      "10.10.11.8"
+    ]
+  },
+  "steps": [
+    {
+      "command": "nmap -sV 10.10.11.8",
+      "output": "Starting Nmap 7.94 ( https://nmap.org ) at 2026-10-20 16:00 UTC\nNmap scan report for 10.10.11.8\nHost is up (0.050s latency).\nNot shown: 999 closed tcp ports (reset)\nPORT   STATE SERVICE VERSION\n22/tcp open  ssh     OpenSSH 7.2p2 Ubuntu 4ubuntu2.8 (Ubuntu Linux; protocol 2.0)\nService Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel\n\nNmap done: 1 IP address (1 host up) scanned in 3.12 seconds\n",
+      "delta": {
+        "hosts": [
+          {
+            "ip": "10.10.11.8",
+            "os": "Linux",
+            "status": "up"
+          }
+        ],
+        "services": [
+          {
+            "host_ip": "10.10.11.8",
+            "port": 22,
+            "proto": "tcp",
+            "name": "ssh",
+            "state": "open",
+            "version": "OpenSSH 7.2p2 Ubuntu 4ubuntu2.8"
+          }
+        ]
+      }
+    }
+  ],
+  "checks": [
+    {
+      "id": "no-web",
+      "text": "does not invent a web service",
+      "none": [
+        "gobuster",
+        "ffuf",
+        "nikto",
+        "wpscan",
+        "dirb"
+      ]
+    },
+    {
+      "id": "wider",
+      "text": "looks wider than the top 1000 ports (full TCP, UDP) or at SSH itself",
+      "any": [
+        "-p-",
+        "all ports",
+        "full",
+        "udp",
+        "ssh",
+        "65535"
+      ]
+    }
+  ],
+  "checklist": [
+    "Notices the scan covered only the top 1000 TCP ports and suggests a full-port or UDP scan.",
+    "Does not suggest brute-forcing SSH as the first move.",
+    "Says plainly that the map is thin, rather than inventing a service."
+  ]
+}

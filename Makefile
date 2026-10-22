@@ -20,7 +20,7 @@ DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)
 
 .DEFAULT_GOAL := help
-.PHONY: help build test lint vuln fmt tidy-check snapshot dev
+.PHONY: help build test lint vuln fmt tidy-check snapshot eval dev
 
 ## Show available targets
 help: 
@@ -55,6 +55,10 @@ tidy-check:
 snapshot: 
 	$(GORELEASER) release --snapshot --clean --skip=sign,sbom
 	
+## Measure a local model on the fixed cases, by hand (needs Ollama; not in CI). EVAL_ARGS=-model ...
+eval: 
+	go run ./cmd/eval $(EVAL_ARGS)
+
 ## Run the watcher from source
 dev: 
 	go run ./cmd/$(BINARY) watch

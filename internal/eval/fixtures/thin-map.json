@@ -1,0 +1,58 @@
+{
+  "name": "thin-map",
+  "description": "A host that is up and has every scanned port filtered: there is nothing to build on.",
+  "case": {
+    "target": "10.10.11.40",
+    "goal": "find a way in",
+    "scope": [
+      "10.10.11.40"
+    ]
+  },
+  "steps": [
+    {
+      "command": "nmap -Pn 10.10.11.40",
+      "output": "Starting Nmap 7.94 ( https://nmap.org ) at 2026-10-20 19:00 UTC\nNmap scan report for 10.10.11.40\nHost is up (0.060s latency).\nAll 1000 scanned ports on 10.10.11.40 are in ignored states.\nNot shown: 1000 filtered tcp ports (no-response)\n\nNmap done: 1 IP address (1 host up) scanned in 21.30 seconds\n",
+      "delta": {
+        "hosts": [
+          {
+            "ip": "10.10.11.40",
+            "status": "up"
+          }
+        ]
+      }
+    }
+  ],
+  "checks": [
+    {
+      "id": "no-invented",
+      "text": "does not invent services or web tools",
+      "none": [
+        "gobuster",
+        "ffuf",
+        "nikto",
+        "wpscan",
+        "dirb",
+        "smbclient",
+        "hydra"
+      ]
+    },
+    {
+      "id": "more-recon",
+      "text": "asks for more reconnaissance (other ports, UDP, another scan type)",
+      "any": [
+        "-p-",
+        "udp",
+        "port",
+        "scan",
+        "-sS",
+        "-sU",
+        "traceroute",
+        "ping"
+      ]
+    }
+  ],
+  "checklist": [
+    "Says the map is too thin (needs_recon) rather than recommending an attack.",
+    "The suggested recon is different from the scan already done."
+  ]
+}
