@@ -276,3 +276,20 @@ func mustScope(entries ...string) scope.Scope {
 	}
 	return s
 }
+
+// The flag of a thin map used to be an exit from the check of the command. It cannot be one now that
+// a model may send it together with a command: Parse clears it, and a command is checked either way.
+func TestAThinMapFlagDoesNotLetACommandPastTheCheck(t *testing.T) {
+	c := ctx(t)
+	s, err := ParseSuggestion([]byte(`{"command":"nmap 8.8.8.8","rationale":"r","expected":"e","risk":"low","confidence":"low","needs_recon":true}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.CheckSuggestion(s); err == nil {
+		t.Error("an out-of-scope command was accepted because the model also said the map is thin")
+	}
+	s.Command = "nmap 10.0.0.5"
+	if err := c.CheckSuggestion(s); err != nil {
+		t.Errorf("an in-scope command was refused: %v", err)
+	}
+}

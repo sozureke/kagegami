@@ -46,7 +46,7 @@ type Suggestion struct {
 	// Confidence is how sure the model is that this is the right step: low, medium or high.
 	Confidence string `json:"confidence"`
 	// NeedsRecon says that the map is too thin to suggest anything: the Command is empty and
-	// the Rationale says what is missing.
+	// the Rationale says what is missing. A parsed Suggestion has it only when it has no Command.
 	NeedsRecon bool `json:"needs_recon"`
 }
 
@@ -55,7 +55,8 @@ type Pipeline struct {
 	// Summary is the state of the target in a few sentences.
 	Summary string `json:"summary"`
 	Steps   []Step `json:"steps"`
-	// NeedsRecon says that the map is too thin for a plan.
+	// NeedsRecon says that the map is too thin for a plan. A parsed Pipeline has it only when it
+	// has no steps.
 	NeedsRecon bool `json:"needs_recon"`
 }
 
@@ -105,9 +106,13 @@ func ParseSuggestion(data []byte) (Suggestion, error) {
 	); err != nil {
 		return Suggestion{}, err
 	}
+	// A model that says the map is too thin and gives a command anyway is taken at its command:
+	// it is what the tester would run, and it goes through the same checks as any other. The flag
+	// only ever means "no command", which is what Check relies on.
+	if s.Command != "" {
+		s.NeedsRecon = false
+	}
 	switch {
-	case s.NeedsRecon && s.Command != "":
-		return Suggestion{}, fmt.Errorf("%w: needs_recon with a command", ErrInvalid)
 	case !s.NeedsRecon && s.Command == "":
 		return Suggestion{}, fmt.Errorf("%w: no command and no needs_recon", ErrInvalid)
 	case s.Rationale == "":
@@ -157,8 +162,9 @@ func ParsePipeline(data []byte) (Pipeline, error) {
 		}
 	}
 	sortSteps(p.Steps)
-	if p.NeedsRecon && len(p.Steps) > 0 {
-		return Pipeline{}, fmt.Errorf("%w: needs_recon with steps", ErrInvalid)
+	// The same for a plan: steps and a plea for more recon together are taken as the steps.
+	if len(p.Steps) > 0 {
+		p.NeedsRecon = false
 	}
 	if !p.NeedsRecon && len(p.Steps) == 0 {
 		return Pipeline{}, fmt.Errorf("%w: no steps and no needs_recon", ErrInvalid)

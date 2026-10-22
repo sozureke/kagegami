@@ -468,3 +468,24 @@ func TestCorrectionIsOneBoundedLine(t *testing.T) {
 		t.Errorf("the reason is %d characters and has a newline: %q", len([]rune(reason)), reason)
 	}
 }
+
+func TestAThinMapFlagNextToACommandIsNotAReasonToRefuse(t *testing.T) {
+	st := caseWithOneHost(t)
+	both := strings.Replace(goodSuggestionJSON, `"needs_recon":false`, `"needs_recon":true`, 1)
+	f := llmtest.NewFake(llmtest.Text(both))
+	res, err := newTier2(t, f, st).Next(bg, "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Suggestion.Command == "" || res.Suggestion.NeedsRecon || len(f.Requests()) != 1 {
+		t.Errorf("suggestion = %+v after %d request(s)", res.Suggestion, len(f.Requests()))
+	}
+
+	// the command is still checked: out of scope, it is sent back like any other
+	outside := strings.Replace(both, "10.0.0.5", "8.8.8.8", 1)
+	f = llmtest.NewFake(llmtest.Text(outside), llmtest.Text(goodSuggestionJSON))
+	res, err = newTier2(t, f, st).Next(bg, "x")
+	if err != nil || strings.Contains(res.Suggestion.Command, "8.8.8.8") || len(f.Requests()) != 2 {
+		t.Errorf("suggestion = %+v, err = %v, %d request(s)", res.Suggestion, err, len(f.Requests()))
+	}
+}

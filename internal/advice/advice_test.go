@@ -38,19 +38,18 @@ func TestParseSuggestion(t *testing.T) {
 		t.Errorf("%+v, %v", thin, err)
 	}
 	bad := map[string]string{
-		"unknown field":        `{"command":"x","rationale":"r","expected":"e","risk":"low","confidence":"low","needs_recon":false,"run":true}`,
-		"text after":           goodSuggestion + ` {}`,
-		"not json":             `use nmap`,
-		"empty":                ``,
-		"bad risk":             `{"command":"x","rationale":"r","expected":"e","risk":"extreme","confidence":"low","needs_recon":false}`,
-		"bad confidence":       `{"command":"x","rationale":"r","expected":"e","risk":"low","confidence":"sure","needs_recon":false}`,
-		"no command":           `{"command":"","rationale":"r","expected":"e","risk":"low","confidence":"low","needs_recon":false}`,
-		"recon with a command": `{"command":"nmap x","rationale":"r","expected":"e","risk":"low","confidence":"low","needs_recon":true}`,
-		"no rationale":         `{"command":"x","rationale":" ","expected":"e","risk":"low","confidence":"low","needs_recon":false}`,
-		"a control character":  "{\"command\":\"x\",\"rationale\":\"a\\u001b[2Jb\",\"expected\":\"e\",\"risk\":\"low\",\"confidence\":\"low\",\"needs_recon\":false}",
-		"a long rationale":     `{"command":"x","rationale":"` + strings.Repeat("r", 2001) + `","expected":"e","risk":"low","confidence":"low","needs_recon":false}`,
-		"a long command":       `{"command":"` + strings.Repeat("x", 501) + `","rationale":"r","expected":"e","risk":"low","confidence":"low","needs_recon":false}`,
-		"a wrong type":         `{"command":1,"rationale":"r","expected":"e","risk":"low","confidence":"low","needs_recon":false}`,
+		"unknown field":       `{"command":"x","rationale":"r","expected":"e","risk":"low","confidence":"low","needs_recon":false,"run":true}`,
+		"text after":          goodSuggestion + ` {}`,
+		"not json":            `use nmap`,
+		"empty":               ``,
+		"bad risk":            `{"command":"x","rationale":"r","expected":"e","risk":"extreme","confidence":"low","needs_recon":false}`,
+		"bad confidence":      `{"command":"x","rationale":"r","expected":"e","risk":"low","confidence":"sure","needs_recon":false}`,
+		"no command":          `{"command":"","rationale":"r","expected":"e","risk":"low","confidence":"low","needs_recon":false}`,
+		"no rationale":        `{"command":"x","rationale":" ","expected":"e","risk":"low","confidence":"low","needs_recon":false}`,
+		"a control character": "{\"command\":\"x\",\"rationale\":\"a\\u001b[2Jb\",\"expected\":\"e\",\"risk\":\"low\",\"confidence\":\"low\",\"needs_recon\":false}",
+		"a long rationale":    `{"command":"x","rationale":"` + strings.Repeat("r", 2001) + `","expected":"e","risk":"low","confidence":"low","needs_recon":false}`,
+		"a long command":      `{"command":"` + strings.Repeat("x", 501) + `","rationale":"r","expected":"e","risk":"low","confidence":"low","needs_recon":false}`,
+		"a wrong type":        `{"command":1,"rationale":"r","expected":"e","risk":"low","confidence":"low","needs_recon":false}`,
 	}
 	for name, doc := range bad {
 		if _, err := ParseSuggestion([]byte(doc)); !errors.Is(err, ErrInvalid) {
@@ -91,7 +90,6 @@ func TestParsePipeline(t *testing.T) {
 		"text after":            goodPipeline + `x`,
 		"not json":              `1. scan`,
 		"no steps":              `{"summary":"s","steps":[],"needs_recon":false}`,
-		"recon with steps":      strings.Replace(goodPipeline, `"needs_recon":false`, `"needs_recon":true`, 1),
 		"priority 0":            strings.Replace(step(``), `"priority":1`, `"priority":0`, 1),
 		"priority 13":           strings.Replace(step(``), `"priority":1`, `"priority":13`, 1),
 		"no service":            strings.Replace(step(``), `"service":"10.0.0.5"`, `"service":""`, 1),
@@ -126,4 +124,15 @@ func FuzzParse(f *testing.F) {
 			}
 		}
 	})
+}
+
+func TestAFlagOfThinMapNextToAnAnswerIsTakenAsTheAnswer(t *testing.T) {
+	s, err := ParseSuggestion([]byte(`{"command":"nmap -p- 10.0.0.5","rationale":"r","expected":"e","risk":"low","confidence":"low","needs_recon":true}`))
+	if err != nil || s.NeedsRecon || s.Command != "nmap -p- 10.0.0.5" {
+		t.Errorf("suggestion = %+v, %v: the command is kept and the flag cleared", s, err)
+	}
+	p, err := ParsePipeline([]byte(strings.Replace(goodPipeline, `"needs_recon":false`, `"needs_recon":true`, 1)))
+	if err != nil || p.NeedsRecon || len(p.Steps) == 0 {
+		t.Errorf("pipeline = %+v, %v: the steps are kept and the flag cleared", p, err)
+	}
 }
