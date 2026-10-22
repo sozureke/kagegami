@@ -658,10 +658,12 @@ func TestWatchOnARealPane(t *testing.T) {
 			t.Error("the pane is not piped while watched")
 		}
 
-		s.send("echo hello")
-		s.send("false")
-		s.send("seq 1 3000")
-		got := waitFinished(t, w, 3)
+		// one command at a time: keys typed while a command runs are echoed into its output
+		var got []terminal.Event
+		for _, line := range []string{"echo hello", "false", "seq 1 3000"} {
+			s.send(line)
+			got = append(got, waitFinished(t, w, 1)...)
+		}
 		wantCmds := []string{"echo hello", "false", "seq 1 3000"}
 		for i, e := range got {
 			if e.Cmd != wantCmds[i] || e.Err != nil || e.End.Aborted {
