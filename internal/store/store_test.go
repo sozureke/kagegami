@@ -65,7 +65,7 @@ func tableNames(t *testing.T, s *Store) []string {
 func TestOpenCreatesSchema(t *testing.T) {
 	s, _ := openTemp(t)
 
-	want := []string{"credential", "engagement", "finding", "host", "journal_entry", "model_usage", "output_blob", "service", "web_path"}
+	want := []string{"credential", "engagement", "finding", "host", "journal_entry", "model_usage", "output_blob", "pipeline_run", "service", "web_path"}
 	if got := tableNames(t, s); !slices.Equal(got, want) {
 		t.Errorf("tables = %v, want %v", got, want)
 	}

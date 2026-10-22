@@ -1,0 +1,1 @@
+{"command":"gobuster dir -u http://10.10.10.5:80 -w /usr/share/wordlists/dirb/common.txt","rationale":"port 80 runs Apache/2.4.41 and only one path (/admin) has been checked so far","expected":"a list of further directories or files on the Apache server","risk":"medium","confidence":"medium","needs_recon":false}

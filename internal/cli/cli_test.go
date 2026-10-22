@@ -339,3 +339,97 @@ func TestCaseSetAndShow(t *testing.T) {
 		}
 	})
 }
+
+func TestNextWithoutScope(t *testing.T) {
+	home := t.TempDir()
+	caseWithHost(t, home, "no-scope")
+	code, out, stderr := runCLI(t, "next", "--case", "no-scope")
+	if code != 2 || out != "" || !strings.Contains(stderr, "kagegami case set --scope") {
+		t.Errorf("code %d, stdout %q, stderr %q", code, out, stderr)
+	}
+}
+
+func TestPipelineWithoutScope(t *testing.T) {
+	home := t.TempDir()
+	caseWithHost(t, home, "no-scope")
+	code, out, stderr := runCLI(t, "pipeline", "--case", "no-scope")
+	if code != 2 || out != "" || !strings.Contains(stderr, "kagegami case set --scope") {
+		t.Errorf("code %d, stdout %q, stderr %q", code, out, stderr)
+	}
+}
+
+func TestNextAndPipelineNeedACase(t *testing.T) {
+	t.Setenv("KAGEGAMI_HOME", t.TempDir())
+	for _, cmd := range []string{"next", "pipeline"} {
+		if code, _, stderr := runCLI(t, cmd); code != 1 || !strings.Contains(stderr, "kagegami init --case") {
+			t.Errorf("%s: code %d, stderr %q", cmd, code, stderr)
+		}
+	}
+}
+
+func TestPipelineHistoryAndShowNeedNoModel(t *testing.T) {
+	home := t.TempDir()
+	caseWithHost(t, home, "hist")
+
+	code, out, _ := runCLI(t, "pipeline", "--case", "hist", "--history")
+	if code != 0 || !strings.Contains(out, "No pipeline has been run yet.") {
+		t.Errorf("empty history: code %d, out %q", code, out)
+	}
+	code, out, _ = runCLI(t, "pipeline", "--case", "hist", "--history", "--json")
+	if code != 0 || strings.TrimSpace(out) != "[]" {
+		t.Errorf("empty history json: code %d, out %q", code, out)
+	}
+	if code, _, stderr := runCLI(t, "pipeline", "--case", "hist", "--show", "1"); code != 2 || !strings.Contains(stderr, "no pipeline run 1") {
+		t.Errorf("missing run: code %d, stderr %q", code, stderr)
+	}
+
+	st, err := store.Open(context.Background(), filepath.Join(home, "data", "cases", "hist", store.FileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := st.Repo().SavePipelineRun(context.Background(), "ollama/llama3.1:8b", "one host with ssh",
+		`[{"priority":1,"service":"10.0.0.5:22/tcp","vector":"ssh","why":"check the version","commands":["ssh-audit 10.0.0.5"],"confidence":"medium"}]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = st.Close()
+
+	code, out, _ = runCLI(t, "pipeline", "--case", "hist", "--history")
+	if code != 0 || !strings.Contains(out, "one host with ssh") || !strings.Contains(out, "ollama/llama3.1:8b") {
+		t.Errorf("history: code %d, out %q", code, out)
+	}
+	code, out, _ = runCLI(t, "pipeline", "--case", "hist", "--show", fmt.Sprint(run.ID))
+	if code != 0 || !strings.Contains(out, "one host with ssh") || !strings.Contains(out, "ssh-audit 10.0.0.5") || !strings.Contains(out, "[medium] ssh") {
+		t.Errorf("show: code %d, out %q", code, out)
+	}
+	code, out, _ = runCLI(t, "pipeline", "--case", "hist", "--show", fmt.Sprint(run.ID), "--json")
+	var decoded store.PipelineRun
+	if code != 0 || json.Unmarshal([]byte(out), &decoded) != nil || decoded.ID != run.ID {
+		t.Errorf("show json: code %d, out %q", code, out)
+	}
+}
+
+func TestNextAndPipelineFlags(t *testing.T) {
+	home := t.TempDir()
+	caseWithHost(t, home, "flags") // has no scope, so the model is never reached: see below
+
+	// Several free-text words after "next"/"pipeline" are a request, not separate arguments;
+	// cobra must accept them and let our own code run (and reach the "no scope" error, not an
+	// argument-count error).
+	for _, args := range [][]string{
+		{"next", "extra", "words", "are", "the", "request"},
+		{"pipeline", "focus", "on", "the", "web", "server"},
+	} {
+		code, out, stderr := runCLI(t, append(args, "--case", "flags")...)
+		if code != 2 || out != "" || !strings.Contains(stderr, "case has no scope") {
+			t.Errorf("%v: code %d, stdout %q, stderr %q", args, code, out, stderr)
+		}
+	}
+	// --history and --show together: --history is checked first and wins, without a model call
+	if code, out, _ := runCLI(t, "pipeline", "--case", "flags", "--history", "--show", "1"); code != 0 || !strings.Contains(out, "No pipeline has been run yet.") {
+		t.Errorf("--history and --show together: code %d, out %q", code, out)
+	}
+	if code, _, _ := runCLI(t, "pipeline", "--case", "flags", "--show", "-1"); code != 2 {
+		t.Errorf("a negative --show was accepted: code %d", code)
+	}
+}
