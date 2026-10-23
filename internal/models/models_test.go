@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/netip"
 	"strings"
 	"sync"
@@ -311,5 +312,41 @@ func TestBuildDoesNotContactAServer(t *testing.T) {
 	set, err := Build(bg, cfg, Options{})
 	if err != nil || set.Tier1.Name() != "ollama/llama3.1:8b" || set.Tier2.Name() != "ollama/llama3.1:8b" || set.Remote {
 		t.Errorf("%v, %v", set, err)
+	}
+}
+
+func TestOpenRouterIsACloudProviderBehindTheSameGateAndTheKeyComesFromTheEnvironment(t *testing.T) {
+	names := func(context.Context, string) ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr("127.0.0.1")}, nil
+	}
+	const key = "sk-or-test-NOT-A-REAL-KEY"
+	cfg := config.Default()
+	cfg.Model.Tier1 = "ollama/llama3.1:8b"
+	cfg.Model.Tier2 = "openrouter/vendor/model-x"
+	env := map[string]string{}
+	opts := Options{Resolver: names, Getenv: func(k string) string { return env[k] }, Retry: fast()}
+
+	if _, err := Build(bg, cfg, opts); !errors.Is(err, ErrCloudFallbackOff) || !strings.Contains(err.Error(), "model.tier2") {
+		t.Fatalf("with cloud_fallback off OpenRouter is refused before anything is built: %v", err)
+	}
+
+	cfg.Model.CloudFallback = true
+	if _, err := Build(bg, cfg, opts); err == nil || !strings.Contains(err.Error(), "OPENROUTER_API_KEY") {
+		t.Fatalf("without a key the error says which variable to set: %v", err)
+	}
+
+	env["OPENROUTER_API_KEY"] = key
+	set, err := Build(bg, cfg, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !set.Remote {
+		t.Error("OpenRouter is a remote model: whatever is sent leaves the machine, and the caller must say so")
+	}
+	if got := set.Tier2.Name(); got != "openrouter/vendor/model-x" {
+		t.Errorf("tier 2 is %q", got)
+	}
+	if strings.Contains(fmt.Sprintf("%v %+v %#v", set, set.Tier2, set.Tier2), key) {
+		t.Error("the key is in what the models print")
 	}
 }

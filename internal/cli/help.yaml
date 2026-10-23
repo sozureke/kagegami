@@ -10,11 +10,25 @@ commands:
   watch:
     short: Open the side panel next to your terminal (tmux)
     long: |-
-      The side panel: one stream of what you run and what Kagegami made of it, with the help one
-      key away (?). It opens with the animation of the splash: section of the config file.
+      Run it inside tmux, in the pane whose commands you want watched:
 
-      It is not connected to your shell or to a case yet, so the stream stays empty for now.
-      q quits.
+          kagegami init --case htb
+          kagegami watch --target 10.10.11.42
+
+      It opens the panel in a new pane on the right and returns. The panel plays the opening
+      animation (the splash: section of the config file), then shows each command you finish in
+      your pane and what Kagegami made of it: hosts, services and paths added to the map. The
+      pane is only read, never typed into. Add the shell hook to your shell's startup file first:
+
+          eval "$(kagegami hook zsh)"
+
+      --target, --goal, --phase, --scope and --add-scope set the case before watching (see
+      kagegami case set). Press q in the panel to stop watching; closing the panel pane does the same.
+  panel:
+    short: Run the side panel in this pane (opened by watch)
+    long: |-
+      The panel process that `kagegami watch` starts in the new pane: it watches the pane given by
+      --pane, records into the case, and draws the stream. It is not meant to be run by hand.
   splash:
     short: Play the opening animation, to tune it
     long: |-

@@ -53,6 +53,13 @@ capture:
 logging:
   level: info # debug | info | warn | error
 
+panel:
+  # Look at every command by itself: as soon as a command is read, ask the model what its output
+  # shows and what to do next, and show the answer in the panel, with no key pressed. Every answer
+  # is one call of the tier2 model; commands that follow one another quickly are one question.
+  # false leaves it to the key n.
+  auto_suggest: true
+
 # The opening animation, played when the panel starts. Settle it once here and forget it: try a
 # change with `kagegami splash` (add --loop to watch it again and again). The art itself is the
 # file internal/splash/assets/art.txt in the source; it is shrunk to fit the terminal on its own.

@@ -2,6 +2,7 @@ package advice
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -91,13 +92,12 @@ func TestParsePipeline(t *testing.T) {
 		"not json":              `1. scan`,
 		"no steps":              `{"summary":"s","steps":[],"needs_recon":false}`,
 		"priority 0":            strings.Replace(step(``), `"priority":1`, `"priority":0`, 1),
-		"priority 13":           strings.Replace(step(``), `"priority":1`, `"priority":13`, 1),
+		"priority 101":          strings.Replace(step(``), `"priority":1`, `"priority":101`, 1),
 		"no service":            strings.Replace(step(``), `"service":"10.0.0.5"`, `"service":""`, 1),
 		"no why":                strings.Replace(step(``), `"why":"w"`, `"why":" "`, 1),
 		"no vector":             strings.Replace(step(``), `"vector":"v"`, `"vector":""`, 1),
 		"bad confidence":        strings.Replace(step(``), `"confidence":"low"`, `"confidence":"certain"`, 1),
-		"too many steps":        `{"summary":"s","needs_recon":false,"steps":[` + many.String() + `]}`,
-		"too many commands":     strings.Replace(step(``), `"commands":[]`, `"commands":["a","b","c","d","e","f"]`, 1),
+		"a runaway of steps":    `{"summary":"s","needs_recon":false,"steps":[` + strings.Repeat(`{"priority":1,"service":"s","vector":"v","why":"w","commands":[],"confidence":"low"},`, 100) + `{"priority":1,"service":"s","vector":"v","why":"w","commands":[],"confidence":"low"}]}`,
 		"a control char in why": strings.Replace(step(``), `"why":"w"`, `"why":"a\u0007b"`, 1),
 		"a long command":        strings.Replace(step(``), `"commands":[]`, `"commands":["`+strings.Repeat("x", 501)+`"]`, 1),
 	}
@@ -134,5 +134,28 @@ func TestAFlagOfThinMapNextToAnAnswerIsTakenAsTheAnswer(t *testing.T) {
 	p, err := ParsePipeline([]byte(strings.Replace(goodPipeline, `"needs_recon":false`, `"needs_recon":true`, 1)))
 	if err != nil || p.NeedsRecon || len(p.Steps) == 0 {
 		t.Errorf("pipeline = %+v, %v: the steps are kept and the flag cleared", p, err)
+	}
+}
+
+func TestAPlanThatIsTooLongIsCutNotRefused(t *testing.T) {
+	p, err := ParsePipeline([]byte(strings.Replace(`{"summary":"s","needs_recon":false,"steps":[{"priority":1,"service":"s","vector":"v","why":"w","commands":[X],"confidence":"low"}]}`,
+		"X", `"a","b","c","d","e","f","g","h","i","j","k","l","m"`, 1)))
+	if err != nil || len(p.Steps) != 1 || strings.Join(p.Steps[0].Commands, "") != "abcde" {
+		t.Fatalf("a step with 13 commands keeps the first %d: %+v, %v", maxCmds, p.Steps, err)
+	}
+
+	var many strings.Builder
+	for i := 1; i <= 15; i++ {
+		if i > 1 {
+			many.WriteString(",")
+		}
+		fmt.Fprintf(&many, `{"priority":%d,"service":"s","vector":"v%d","why":"w","commands":[],"confidence":"low"}`, 16-i, i)
+	}
+	p, err = ParsePipeline([]byte(`{"summary":"s","needs_recon":false,"steps":[` + many.String() + `]}`))
+	if err != nil || len(p.Steps) != maxSteps {
+		t.Fatalf("15 steps keep the best %d: %d steps, %v", maxSteps, len(p.Steps), err)
+	}
+	if p.Steps[0].Priority != 1 || p.Steps[maxSteps-1].Priority != maxSteps {
+		t.Errorf("the steps kept are those with the lowest priority numbers: first %d, last %d", p.Steps[0].Priority, p.Steps[maxSteps-1].Priority)
 	}
 }

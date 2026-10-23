@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -117,17 +118,42 @@ func (h *harness) hasNote(substr string) bool {
 	return false
 }
 
+// update returns what became of the command: its last update, not the early one that only says it
+// was accepted.
 func (h *harness) update(cmdPrefix string) Update {
 	h.t.Helper()
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, u := range h.updates {
-		if strings.HasPrefix(u.Cmd, cmdPrefix) {
+		if strings.HasPrefix(u.Cmd, cmdPrefix) && !u.Queued {
 			return u
 		}
 	}
 	h.t.Fatalf("no update for %q in %+v", cmdPrefix, h.updates)
 	return Update{}
+}
+
+func TestACommandIsAnnouncedAtOnceAndAgainWhenItHasBeenRead(t *testing.T) {
+	h := newHarness(t, nil)
+	h.run(stream([3]string{"nmap -sV 127.0.0.1", nmapOut, "0"}, [3]string{"clear", "", "0"}))
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var nmapUpdates []Update
+	for _, u := range h.updates {
+		if strings.HasPrefix(u.Cmd, "nmap") {
+			nmapUpdates = append(nmapUpdates, u)
+		}
+		if strings.HasPrefix(u.Cmd, "clear") && (u.Queued || u.Handled) {
+			t.Errorf("a command that is dropped is never announced as accepted: %+v", u)
+		}
+	}
+	if len(nmapUpdates) != 2 || !nmapUpdates[0].Queued || nmapUpdates[0].Handled || !nmapUpdates[1].Handled || nmapUpdates[1].Queued {
+		t.Fatalf("updates = %+v: first accepted, then handled", nmapUpdates)
+	}
+	if nmapUpdates[0].Added.Total() != 0 || nmapUpdates[1].Added.Total() == 0 {
+		t.Errorf("the early update has no result and the last one has: %+v", nmapUpdates)
+	}
 }
 
 func TestACommandWithAParserReachesTheMap(t *testing.T) {
@@ -486,5 +512,83 @@ func TestADumpOfTenThousandLinesIsBoundedForTheModel(t *testing.T) {
 	blob, _ := h.st.Repo().GetBlob(bg, h.update("unknowntool").BlobID)
 	if blob.Size < int64(dump.Len()) {
 		t.Errorf("only %d of %d bytes were kept", blob.Size, dump.Len())
+	}
+}
+
+type fixedScope struct{ ips []string }
+
+func (s fixedScope) Contains(ip string) bool { return slices.Contains(s.ips, ip) }
+func (s fixedScope) IsEmpty() bool           { return len(s.ips) == 0 }
+
+func TestWhatAParserFindsOutsideTheScopeStaysOffTheMapWithANote(t *testing.T) {
+	h := newHarness(t, func(c *Config) {
+		c.Scope = func(context.Context) ScopeCheck { return fixedScope{ips: []string{"10.10.11.42"}} }
+	})
+	h.run(stream([3]string{"nmap -sV 127.0.0.1", nmapOut, "0"}))
+
+	if v := h.view(); len(v.Hosts) != 0 {
+		t.Fatalf("a host outside the scope reached the map: %+v", v.Hosts)
+	}
+	if !h.hasNote("outside the scope, left off the map: 127.0.0.1") {
+		t.Errorf("notes = %v", h.notes())
+	}
+	for _, n := range h.notes() {
+		if strings.Contains(n, "http-title") || strings.Contains(n, "8000/tcp") {
+			t.Errorf("a script note about the host that was left out came back in words: %q", n)
+		}
+	}
+	if u := h.update("nmap"); u.By != "parser nmap" || u.Err != nil {
+		t.Errorf("update = %+v", u)
+	}
+}
+
+func TestWhatAParserFindsInsideTheScopeIsKept(t *testing.T) {
+	h := newHarness(t, func(c *Config) {
+		c.Scope = func(context.Context) ScopeCheck { return fixedScope{ips: []string{"127.0.0.1"}} }
+	})
+	h.run(stream([3]string{"nmap -sV 127.0.0.1", nmapOut, "0"}))
+	if v := h.view(); len(v.Hosts) != 1 {
+		t.Fatalf("hosts = %+v", v.Hosts)
+	}
+	if h.hasNote("outside the scope") {
+		t.Errorf("nothing was left out, so no note: %v", h.notes())
+	}
+}
+
+func TestTheScopeIsReadForEveryCommandSoAChangeCountsAtOnce(t *testing.T) {
+	scope := fixedScope{ips: []string{"10.0.0.9"}}
+	var mu sync.Mutex
+	h := newHarness(t, func(c *Config) {
+		c.Scope = func(context.Context) ScopeCheck { mu.Lock(); defer mu.Unlock(); return scope }
+	})
+	h.run(stream([3]string{"nmap -sV 127.0.0.1", nmapOut, "0"}))
+	if len(h.view().Hosts) != 0 {
+		t.Fatal("the first scan was outside the scope")
+	}
+	mu.Lock()
+	scope = fixedScope{ips: []string{"127.0.0.1"}}
+	mu.Unlock()
+	h.run(stream([3]string{"nmap -sV 127.0.0.1", nmapOut, "0"}))
+	if len(h.view().Hosts) != 1 {
+		t.Error("after the scope changed the same scan must reach the map")
+	}
+}
+
+func TestWithAnEmptyScopeTheParsersWorkAndNoModelIsCalled(t *testing.T) {
+	f := llmtest.NewFake(llmtest.Text(`{}`))
+	h := newHarness(t, func(c *Config) {
+		c.Tier1 = &Tier1{Provider: f}
+		c.Scope = func(context.Context) ScopeCheck { return fixedScope{} }
+	})
+	h.run(stream([3]string{"nmap -sV 127.0.0.1", nmapOut, "0"}, [3]string{"smbmap -H 10.0.0.5", "share ADMIN$", "0"}))
+
+	if len(h.view().Hosts) != 1 {
+		t.Error("with no scope the parsers still put what they find on the map")
+	}
+	if len(f.Requests()) != 0 {
+		t.Errorf("%d model calls with no scope", len(f.Requests()))
+	}
+	if u := h.update("smbmap"); u.By != "" || u.Err != nil {
+		t.Errorf("the command is recorded and not read: %+v", u)
 	}
 }

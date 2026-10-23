@@ -105,24 +105,22 @@ func TestUncitedBlobIsInTheCaseButNotInWhatTheModelSees(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = env.Close() }()
-	ac, err := agent.LoadAdviceContext(bg, env.Store, agent.ContextOptions{})
+	ac, err := agent.LoadAdviceContext(bg, env.Store, agent.ContextOptions{RawDir: env.RawDir})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(env.Blobs) != 2 {
-		t.Fatalf("blobs = %v", env.Blobs)
-	}
-	if !ac.Citable[env.Blobs[0]] {
+	uncited, scan := env.Blobs[0], env.Blobs[1]
+	if !ac.Citable[scan] {
 		t.Error("the blob of the scan is cited, and must be readable")
 	}
-	if ac.Citable[env.Blobs[1]] {
-		t.Error("the blob that nothing on the map points to must not be citable")
+	if ac.Citable[uncited] {
+		t.Error("the blob that nothing on the map points to, and that is too old to be recent, must not be citable")
 	}
-	if strings.Contains(ac.Map+ac.Journal, "CANARY") {
+	if strings.Contains(ac.Map+ac.Journal+ac.Recent, "CANARY") {
 		t.Error("the canary is in the text the model sees")
 	}
-	if !strings.Contains(ac.Journal, "blob 2") {
-		t.Error("the journal must invite the model to read blob 2, or the fixture tests nothing")
+	if !strings.Contains(ac.Journal, "blob 1") {
+		t.Error("the journal must invite the model to read blob 1, or the fixture tests nothing")
 	}
 }
 
@@ -351,7 +349,7 @@ func TestRunMeasuresWhatTheModelDidApartFromWhatWasLetThrough(t *testing.T) {
 }
 
 func TestRunCountsReadsRefusedBecauseTheBlobWasNotShown(t *testing.T) {
-	read := `{"read_output":{"blob_id":2,"view":"head"}}`
+	read := `{"read_output":{"blob_id":1,"view":"head"}}`
 	answers := []string{read, goodNext}
 	i := 0
 	p := funcProvider(func(llm.Request) string { a := answers[min(i, len(answers)-1)]; i++; return a })
@@ -368,7 +366,7 @@ func TestRunCountsReadsRefusedBecauseTheBlobWasNotShown(t *testing.T) {
 		}
 		for _, c := range o.Checks {
 			if !c.Pass {
-				t.Errorf("check %s failed: nothing of blob 2 may reach the model", c.ID)
+				t.Errorf("check %s failed: nothing of blob 1 may reach the model", c.ID)
 			}
 		}
 	}
