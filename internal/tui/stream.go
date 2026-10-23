@@ -69,6 +69,8 @@ func renderEvent(e Event, width int) []string {
 		return hang(gutter("", " ", styleDim, styleLo), emphasize(e.Text, e.Words), lipgloss.NewStyle())
 	case KindNote:
 		return hang(gutter(GlyphReport, " ", styleUser, styleUser), e.Text, styleUser)
+	case KindUser:
+		return hang(gutter("", "❯", styleUser, stylePrompt), e.Text, styleUser)
 	case KindFinding:
 		return hang(gutter("!", " ", styleFind, styleFind), e.Text, styleFind)
 	case KindSystem:

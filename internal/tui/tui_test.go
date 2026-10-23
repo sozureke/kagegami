@@ -24,17 +24,30 @@ func newModel(t *testing.T, cfg Config) *Model {
 	return m
 }
 
-func press(m *Model, k string) tea.Cmd {
-	var key tea.Msg
-	switch k {
-	case "ctrl+c":
-		key = tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
-	default:
-		key = tea.KeyPressMsg{Code: []rune(k)[0], Text: k}
-	}
-	_, cmd := m.Update(key)
+// pressKey sends one key to the model and returns the command.
+func pressKey(m *Model, k tea.KeyPressMsg) tea.Cmd {
+	_, cmd := m.Update(k)
 	return cmd
 }
+
+// typeText types each character into the input (no Enter).
+func typeText(m *Model, text string) {
+	for _, r := range text {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+}
+
+// submit enters a whole line and presses Enter, as the tester would, and returns the command.
+func submit(m *Model, line string) tea.Cmd {
+	typeText(m, line)
+	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	return cmd
+}
+
+// cmdRun submits a line and carries out the command it returns.
+func cmdRun(m *Model, line string) { run(m, submit(m, line)) }
+
+func ctrlC(m *Model) tea.Cmd { return pressKey(m, tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}) }
 
 func isQuit(cmd tea.Cmd) bool {
 	if cmd == nil {
@@ -44,15 +57,15 @@ func isQuit(cmd tea.Cmd) bool {
 	return ok
 }
 
-func TestTheHelpBlockOpensAndClosesWithItsKey(t *testing.T) {
+func TestHelpOpensAndClosesTheHelpBlock(t *testing.T) {
 	m := newModel(t, Config{})
-	press(m, "?")
-	if len(m.events) != 1 || m.events[0].Block != blockHelp || !strings.Contains(plain(m.events[0].Lines), "ask for the next step") {
+	submit(m, "/help")
+	if len(m.events) != 1 || m.events[0].Block != blockHelp || !strings.Contains(plain(m.events[0].Lines), "/ask") {
 		t.Fatalf("events = %+v", m.events)
 	}
-	press(m, "?")
+	submit(m, "/help")
 	if len(m.events) != 0 {
-		t.Error("the same key closes it")
+		t.Error("/help again closes it")
 	}
 }
 
@@ -123,22 +136,48 @@ func TestTheTurnKnowsWhenItNeedsATimer(t *testing.T) {
 	}
 }
 
-func TestQAndCtrlCQuit(t *testing.T) {
-	m := newModel(t, Config{})
+func TestCtrlCAndExitQuitGentlyAndTypingDoesNot(t *testing.T) {
+	m := newModel(t, Config{SessionName: "htb"})
 	if m.Init() != nil {
 		t.Error("the panel has nothing to start")
 	}
-	if !isQuit(press(m, "q")) || !isQuit(press(m, "ctrl+c")) {
-		t.Error("q and ctrl+c quit")
+	typeText(m, "q") // a bare letter goes into the input, it does not quit
+	if m.in.empty() || isQuit(pressKey(m, tea.KeyPressMsg{Code: 'x', Text: "x"})) || len(m.events) != 0 {
+		t.Error("typing is not a command")
 	}
-	if press(m, "x") != nil || len(m.events) != 0 {
-		t.Error("a key with no meaning does nothing")
+	m.in = input{} // clear what was typed
+
+	// ctrl+c does not quit at once; it shows the farewell and schedules the quit (do not invoke the
+	// tick command, which blocks until it fires).
+	if cmd := ctrlC(m); cmd == nil || !m.quitting {
+		t.Fatal("ctrl+c must start the gentle exit")
+	}
+	if !strings.Contains(lastEvent(m).Text, "resume it with:  kagegami watch --case htb") {
+		t.Errorf("the farewell must name how to resume: %q", lastEvent(m).Text)
+	}
+	if _, next := m.Update(quitMsg{}); !isQuit(next) {
+		t.Error("after the farewell the program quits")
+	}
+	// while quitting, keys do nothing
+	if pressKey(m, tea.KeyPressMsg{Code: 'a', Text: "a"}) != nil {
+		t.Error("keys are ignored once the panel is quitting")
+	}
+}
+
+func TestExitCommandAlsoQuitsGently(t *testing.T) {
+	m := newModel(t, Config{SessionName: "box"})
+	if cmd := submit(m, "/exit"); cmd == nil || !m.quitting || !strings.Contains(lastEvent(m).Text, "box") {
+		t.Errorf("/exit shows the farewell then quits: %q", lastEvent(m).Text)
+	}
+	if _, next := m.Update(quitMsg{}); !isQuit(next) {
+		t.Error("the quit follows")
 	}
 }
 
 func TestAnEmptyPanelSaysHowToGetHelp(t *testing.T) {
 	m := newModel(t, Config{})
-	if got := ansi.Strip(m.View().Content); !strings.Contains(got, "press ? for the keys") {
+	got := ansi.Strip(m.View().Content)
+	if !strings.Contains(got, "type a message") || !strings.Contains(got, "/help") || !strings.Contains(got, "❯") {
 		t.Errorf("view = %q", got)
 	}
 }
@@ -156,7 +195,7 @@ func TestEveryLineOfTheViewFitsThePane(t *testing.T) {
 		{Kind: KindFinding, Text: "/backup/ lists its directory (medium)"},
 		{Kind: KindNote, Text: "check whether the backup holds a database dump"},
 		{Kind: KindAssistant, Time: fixedNow(), Turn: turn},
-		{Kind: KindBlock, Block: blockHelp, Lines: helpLines()},
+		{Kind: KindBlock, Block: blockHelp, Lines: commandHelp()},
 	}
 	for _, w := range []int{14, 20, 33, 60, 120} {
 		m := New(Config{Now: fixedNow})
@@ -219,7 +258,7 @@ func TestAppendMsgAddsEntriesAndStampsTheTime(t *testing.T) {
 
 func TestTheEmptyLivePanelInvitesACommand(t *testing.T) {
 	live := ansi.Strip(newModel(t, Config{Live: true}).View().Content)
-	if !strings.Contains(live, "run a command in the other pane") || !strings.Contains(live, "? shows the keys") {
+	if !strings.Contains(live, "watching your shell") || !strings.Contains(live, "/help") {
 		t.Errorf("live view = %q", live)
 	}
 	if strings.Contains(ansi.Strip(newModel(t, Config{}).View().Content), "other pane") {
@@ -271,16 +310,23 @@ func TestANarrowPaneHasNoOutlineAndALongStreamKeepsItsLastLines(t *testing.T) {
 		t.Error("a pane too narrow for an outline keeps the room for the text")
 	}
 
-	m.Update(tea.WindowSizeMsg{Width: 50, Height: 6})
+	m.Update(tea.WindowSizeMsg{Width: 50, Height: 8})
 	for i := range 30 {
 		m.Update(AppendMsg{Events: []Event{{Kind: KindCommand, Text: "cmd-" + string(rune('a'+i%26))}}})
 	}
 	lines := strings.Split(ansi.Strip(m.View().Content), "\n")
-	if len(lines) != 6 || !strings.Contains(lines[4], "cmd-") {
-		t.Errorf("view =\n%s", strings.Join(lines, "\n"))
+	if len(lines) != 8 {
+		t.Fatalf("view =\n%s", strings.Join(lines, "\n"))
 	}
-	if !strings.Contains(strings.Join(lines, "\n"), "cmd-d") { // the 30th of 30 is index 29: 'd'
-		t.Error("the newest entry must be at the bottom")
+	if !strings.Contains(lines[len(lines)-2], "❯") {
+		t.Errorf("the input is the last inner line: %q", lines[len(lines)-2])
+	}
+	stream := lines[1 : len(lines)-3] // between the top outline and the blank + input + bottom outline
+	if last := stream[len(stream)-1]; !strings.Contains(last, "cmd-d") {
+		t.Errorf("the newest command is at the bottom of the stream: %q", last)
+	}
+	if strings.Contains(strings.Join(stream, "\n"), "$ cmd-"+string(rune('a'+30-1-len(stream)))) {
+		t.Error("more than the last lines were kept")
 	}
 }
 
@@ -294,6 +340,7 @@ type fakeBackend struct {
 	pipelines []bool
 	nexts     int
 	autos     []bool
+	asked     []string
 }
 
 func (f *fakeBackend) Map(context.Context) (string, error) { f.maps++; return f.mapText, f.err }
@@ -305,6 +352,11 @@ func (f *fakeBackend) Pipeline(_ context.Context, fresh bool) (string, error) {
 func (f *fakeBackend) Next(_ context.Context, auto bool) (Suggestion, error) {
 	f.nexts++
 	f.autos = append(f.autos, auto)
+	return f.next, f.err
+}
+
+func (f *fakeBackend) Ask(_ context.Context, q string) (Suggestion, error) {
+	f.asked = append(f.asked, q)
 	return f.next, f.err
 }
 
@@ -326,8 +378,6 @@ func run(m *Model, cmd tea.Cmd) {
 	}
 }
 
-func keyRun(m *Model, k string) { run(m, press(m, k)) }
-
 func liveModel(t *testing.T, b Backend) *Model {
 	t.Helper()
 	return newModel(t, Config{Live: true, Backend: b})
@@ -337,8 +387,8 @@ func lastEvent(m *Model) Event { return m.events[len(m.events)-1] }
 
 func TestWithoutABackendTheKeysSayNothingIsConnected(t *testing.T) {
 	m := liveModel(t, nil)
-	for _, k := range []string{"m", "p", "P", "n"} {
-		keyRun(m, k)
+	for _, line := range []string{"/map", "/pipeline", "/pipeline new", "/next"} {
+		cmdRun(m, line)
 	}
 	if len(m.events) != 4 {
 		t.Fatalf("%d entries", len(m.events))
@@ -354,7 +404,7 @@ func TestMShowsTheMapAndTheSameKeyTakesItAway(t *testing.T) {
 	b := &fakeBackend{mapText: "10.0.0.5  box.htb\n├─ 22/tcp  open  ssh\n"}
 	m := liveModel(t, b)
 	m.Update(AppendMsg{Events: []Event{{Kind: KindCommand, Text: "nmap 10.0.0.5"}}})
-	keyRun(m, "m")
+	cmdRun(m, "/map")
 	m.Update(AppendMsg{Events: []Event{{Kind: KindCommand, Text: "ffuf"}}})
 
 	if len(m.events) != 3 || m.events[1].Block != blockMap {
@@ -364,7 +414,7 @@ func TestMShowsTheMapAndTheSameKeyTakesItAway(t *testing.T) {
 	if !strings.HasPrefix(block, "map\n") || !strings.Contains(block, "22/tcp  open  ssh") {
 		t.Errorf("block =\n%s", block)
 	}
-	keyRun(m, "m")
+	cmdRun(m, "/map")
 	if m.has(blockMap) || len(m.events) != 2 || b.maps != 1 {
 		t.Errorf("the same key must take it away without asking again: %d entries, %d asks", len(m.events), b.maps)
 	}
@@ -373,7 +423,7 @@ func TestMShowsTheMapAndTheSameKeyTakesItAway(t *testing.T) {
 func TestAnOpenMapIsRefreshedInPlaceWhenTheMapChanges(t *testing.T) {
 	b := &fakeBackend{mapText: "one host"}
 	m := liveModel(t, b)
-	keyRun(m, "m")
+	cmdRun(m, "/map")
 	m.Update(AppendMsg{Events: []Event{{Kind: KindCommand, Text: "later"}}})
 	b.mapText = "two hosts"
 	run(m, func() tea.Msg { _, c := m.Update(MapChangedMsg{}); return c() })
@@ -381,7 +431,7 @@ func TestAnOpenMapIsRefreshedInPlaceWhenTheMapChanges(t *testing.T) {
 	if b.maps != 2 || len(m.events) != 2 || m.events[0].Block != blockMap || !strings.Contains(plain(m.events[0].Lines), "two hosts") {
 		t.Errorf("maps=%d entries=%+v", b.maps, m.events)
 	}
-	keyRun(m, "m")
+	cmdRun(m, "/map")
 	if _, cmd := m.Update(MapChangedMsg{}); cmd != nil || b.maps != 2 {
 		t.Error("a map that is not shown is not fetched")
 	}
@@ -390,8 +440,8 @@ func TestAnOpenMapIsRefreshedInPlaceWhenTheMapChanges(t *testing.T) {
 func TestMAsksOnceWhileTheMapIsOnItsWay(t *testing.T) {
 	b := &fakeBackend{mapText: "m"}
 	m := liveModel(t, b)
-	first := press(m, "m")
-	if second := press(m, "m"); second != nil {
+	first := submit(m, "/map")
+	if second := submit(m, "/map"); second != nil {
 		t.Error("a second press while the map is being fetched must do nothing")
 	}
 	run(m, first)
@@ -403,7 +453,7 @@ func TestMAsksOnceWhileTheMapIsOnItsWay(t *testing.T) {
 func TestPShowsTheLatestPipelineAndPCapitalAsksForANewOne(t *testing.T) {
 	b := &fakeBackend{pipeText: "1. [high] web content discovery\n   $ gobuster dir -u http://10.0.0.5\n"}
 	m := liveModel(t, b)
-	cmd := press(m, "p")
+	cmd := submit(m, "/pipeline")
 	if lastEvent(m).Turn == nil || lastEvent(m).Turn.State != turnThinking {
 		t.Fatal("while the plan is on its way the stream shows that the assistant is working")
 	}
@@ -411,14 +461,14 @@ func TestPShowsTheLatestPipelineAndPCapitalAsksForANewOne(t *testing.T) {
 	if len(m.events) != 1 || m.events[0].Block != blockPipeline || !strings.Contains(plain(m.events[0].Lines), "web content discovery") {
 		t.Fatalf("entries = %+v", m.events)
 	}
-	keyRun(m, "p")
+	cmdRun(m, "/pipeline")
 	if m.has(blockPipeline) || len(b.pipelines) != 1 {
 		t.Errorf("p again takes it away and asks nothing: calls %v", b.pipelines)
 	}
 
-	keyRun(m, "p")
+	cmdRun(m, "/pipeline")
 	b.pipeText = "a newer plan"
-	keyRun(m, "P")
+	cmdRun(m, "/pipeline new")
 	if len(b.pipelines) != 3 || b.pipelines[0] || b.pipelines[1] || !b.pipelines[2] {
 		t.Errorf("calls = %v: p asks for the latest, P for a fresh one", b.pipelines)
 	}
@@ -430,17 +480,17 @@ func TestPShowsTheLatestPipelineAndPCapitalAsksForANewOne(t *testing.T) {
 func TestAFailedBlockLeavesALineAndNoSpinner(t *testing.T) {
 	b := &fakeBackend{err: errors.New("the case has no scope:\n set one")}
 	m := liveModel(t, b)
-	keyRun(m, "p")
+	cmdRun(m, "/pipeline")
 	if len(m.events) != 1 || m.events[0].Kind != KindSystem || !strings.Contains(m.events[0].Text, "the case has no scope: set one") {
 		t.Errorf("entries = %+v", m.events)
 	}
-	keyRun(m, "m")
+	cmdRun(m, "/map")
 	if len(m.events) != 2 || m.has(blockMap) {
 		t.Errorf("a map that failed to load is not shown: %+v", m.events)
 	}
 	b.err = nil
 	b.mapText = "ok"
-	keyRun(m, "m")
+	cmdRun(m, "/map")
 	if !m.has(blockMap) {
 		t.Error("after a failure the key must work again")
 	}
@@ -449,12 +499,12 @@ func TestAFailedBlockLeavesALineAndNoSpinner(t *testing.T) {
 func TestNAnswersWithASpinnerThenTypedTextAndItsRisk(t *testing.T) {
 	b := &fakeBackend{next: Suggestion{Rationale: "port 80 serves nginx", Command: "gobuster dir -u http://10.0.0.5", Risk: "medium", Confidence: "high"}}
 	m := liveModel(t, b)
-	cmd := press(m, "n")
+	cmd := submit(m, "/next")
 	turn := lastEvent(m).Turn
 	if turn == nil || turn.State != turnThinking || !strings.Contains(plain(renderEvent(lastEvent(m), 80)), "thinking") {
 		t.Fatal("the answer starts as a spinner")
 	}
-	if again := press(m, "n"); again != nil || len(m.events) != 1 {
+	if again := submit(m, "/next"); again != nil || len(m.events) != 1 {
 		t.Error("one question at a time")
 	}
 	run(m, cmd)
@@ -478,7 +528,7 @@ func TestNAnswersWithASpinnerThenTypedTextAndItsRisk(t *testing.T) {
 func TestNWithNothingToSuggestShowsTheReasonAndNoCommandBox(t *testing.T) {
 	b := &fakeBackend{next: Suggestion{Rationale: "no services are known; scan the target first", NeedsRecon: true}}
 	m := liveModel(t, b)
-	keyRun(m, "n")
+	cmdRun(m, "/next")
 	for m.typing {
 		m.typeTick()
 	}
@@ -491,13 +541,13 @@ func TestNWithNothingToSuggestShowsTheReasonAndNoCommandBox(t *testing.T) {
 func TestNThatFailsLeavesTheErrorInTheStreamAndFreesTheKey(t *testing.T) {
 	b := &fakeBackend{err: errors.New("connection refused")}
 	m := liveModel(t, b)
-	keyRun(m, "n")
+	cmdRun(m, "/next")
 	if len(m.events) != 1 || m.events[0].Kind != KindSystem || !strings.Contains(m.events[0].Text, "connection refused") {
 		t.Fatalf("entries = %+v", m.events)
 	}
 	b.err = nil
 	b.next = Suggestion{Rationale: "r", Command: "c", Risk: "low", Confidence: "low"}
-	keyRun(m, "n")
+	cmdRun(m, "/next")
 	if b.nexts != 2 {
 		t.Error("after an error the key must work again")
 	}
@@ -505,7 +555,7 @@ func TestNThatFailsLeavesTheErrorInTheStreamAndFreesTheKey(t *testing.T) {
 
 func TestTheSpinnerTimerStopsWhenNothingWaits(t *testing.T) {
 	m := liveModel(t, &fakeBackend{next: Suggestion{Rationale: "r", Command: "c"}})
-	cmd := press(m, "n")
+	cmd := submit(m, "/next")
 	if _, next := m.spinTick(); next == nil {
 		t.Error("the spinner goes on while an answer is awaited")
 	}
@@ -518,15 +568,40 @@ func TestTheSpinnerTimerStopsWhenNothingWaits(t *testing.T) {
 	}
 }
 
-func TestTheHelpListsTheKeysAndNotTheKindsOfEntry(t *testing.T) {
-	out := plain(helpLines())
-	for _, want := range []string{"n  ask for the next step", "m  the map", "p  the pipeline", "P  ask for a new pipeline", "q  quit"} {
+func TestTheHelpListsTheSlashCommands(t *testing.T) {
+	out := plain(commandHelp())
+	for _, want := range []string{"/ask", "/next", "/map", "/pipeline", "/copy", "/clear", "/help", "/exit"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("help lacks %q:\n%s", want, out)
 		}
 	}
-	if strings.Contains(out, "the stream") || strings.Contains(out, "assistant") {
-		t.Errorf("the legend of entry kinds is visual noise and is gone:\n%s", out)
+	if strings.Contains(out, "a block opened by a key") {
+		t.Errorf("the help lists commands, not entry kinds:\n%s", out)
+	}
+}
+
+func TestParseCommand(t *testing.T) {
+	tests := []struct {
+		in    string
+		name  string
+		args  string
+		isCmd bool
+	}{
+		{"/map", "map", "", true},
+		{"/pipeline new", "pipeline", "new", true},
+		{"/ask what is on 8000", "ask", "what is on 8000", true},
+		{"/MAP", "map", "", true},
+		{"/ask   ", "ask", "", true},
+		{"not a command", "", "", false},
+		{"/", "", "", false},
+		{"/ not a command", "", "", false},
+		{"", "", "", false},
+	}
+	for _, tt := range tests {
+		c, ok := parseCommand(tt.in)
+		if ok != tt.isCmd || (ok && (c.name != tt.name || c.args != tt.args)) {
+			t.Errorf("parseCommand(%q) = %+v, %v", tt.in, c, ok)
+		}
 	}
 }
 
@@ -590,7 +665,7 @@ func TestEveryReadCommandIsLookedAtByTheAgentWithoutAnyKey(t *testing.T) {
 func TestTheKeyAsksWithoutSayingACommandJustFinished(t *testing.T) {
 	b := &fakeBackend{next: Suggestion{Rationale: "r", Command: "c"}}
 	m := liveModel(t, b)
-	keyRun(m, "n")
+	cmdRun(m, "/next")
 	if len(b.autos) != 1 || b.autos[0] {
 		t.Errorf("auto flags = %v: a person's question is not a reaction to a command", b.autos)
 	}
@@ -640,7 +715,7 @@ func TestACommandThatArrivesWhileTheAgentThinksIsAskedAboutRightAfter(t *testing
 func TestACommandThatArrivesWhileThePersonAsksIsAskedAboutRightAfter(t *testing.T) {
 	b := &fakeBackend{next: Suggestion{Rationale: "r", Command: "c"}}
 	m := autoModel(t, b)
-	pending := press(m, "n")
+	pending := submit(m, "/next")
 	m.Update(commandDone(m))
 	run(m, pending)
 	if b.nexts != 2 {
@@ -697,8 +772,8 @@ func TestAModelThatIsDownIsSaidOnceNotAfterEveryCommand(t *testing.T) {
 func TestAKeyThatAsksIsNeverMuteAboutAFailure(t *testing.T) {
 	b := &fakeBackend{err: errors.New("boom")}
 	m := liveModel(t, b)
-	keyRun(m, "n")
-	keyRun(m, "n")
+	cmdRun(m, "/next")
+	cmdRun(m, "/next")
 	if n := len(m.events); n != 2 {
 		t.Errorf("a person who presses n twice sees both failures, got %d entries", n)
 	}
@@ -709,15 +784,15 @@ func TestCCopiesTheLatestSuggestedCommand(t *testing.T) {
 	b := &fakeBackend{next: Suggestion{Rationale: "r", Command: "gobuster dir -u http://10.0.0.5", Risk: "low", Confidence: "low"}}
 	m := newModel(t, Config{Live: true, Backend: b, Copy: func(s string) error { copied = append(copied, s); return nil }})
 
-	keyRun(m, "c")
+	cmdRun(m, "/copy")
 	if len(copied) != 0 || !strings.Contains(lastEvent(m).Text, "no suggested command to copy") {
 		t.Fatalf("nothing to copy yet: %v, %+v", copied, lastEvent(m))
 	}
-	keyRun(m, "n")
+	cmdRun(m, "/next")
 	for m.typing {
 		m.typeTick()
 	}
-	cmd := press(m, "c")
+	cmd := submit(m, "/copy")
 	var seen []tea.Msg
 	var walk func(c tea.Cmd)
 	walk = func(c tea.Cmd) {
@@ -766,5 +841,117 @@ func TestANoticeIsTheFirstLineOfTheStream(t *testing.T) {
 	}
 	if len(newModel(t, Config{Live: true}).events) != 0 {
 		t.Error("with no notice the stream starts empty")
+	}
+}
+
+func TestTheInputEditsAndSubmitsALine(t *testing.T) {
+	m := newModel(t, Config{})
+	typeText(m, "nmap")
+	if string(m.in.runes) != "nmap" || m.in.cursor != 4 {
+		t.Fatalf("after typing: %q cursor %d", string(m.in.runes), m.in.cursor)
+	}
+	// left twice, insert, so "nmXap"
+	pressKey(m, tea.KeyPressMsg{Code: tea.KeyLeft})
+	pressKey(m, tea.KeyPressMsg{Code: tea.KeyLeft})
+	typeText(m, "X")
+	if string(m.in.runes) != "nmXap" {
+		t.Errorf("insert in the middle: %q", string(m.in.runes))
+	}
+	pressKey(m, tea.KeyPressMsg{Code: tea.KeyBackspace})
+	if string(m.in.runes) != "nmap" {
+		t.Errorf("backspace: %q", string(m.in.runes))
+	}
+	pressKey(m, tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl}) // ctrl+u clears
+	if !m.in.empty() {
+		t.Error("ctrl+u clears the line")
+	}
+	typeText(m, "run a full scan")
+	pressKey(m, tea.KeyPressMsg{Code: 'w', Mod: tea.ModCtrl}) // ctrl+w deletes a word
+	if string(m.in.runes) != "run a full " {
+		t.Errorf("ctrl+w: %q", string(m.in.runes))
+	}
+}
+
+func TestTypingAMessageAsksTheAssistantAndShowsItInTheStream(t *testing.T) {
+	b := &fakeBackend{next: Suggestion{Rationale: "port 8000 is a Python http server", Command: "curl -s http://10.0.0.5:8000/", Risk: "low", Confidence: "medium"}}
+	m := liveModel(t, b)
+	cmd := submit(m, "what is on port 8000?")
+	if len(m.events) != 2 || m.events[0].Kind != KindUser || m.events[0].Text != "what is on port 8000?" {
+		t.Fatalf("the question is shown as the tester's own: %+v", m.events)
+	}
+	if lastEvent(m).Turn == nil {
+		t.Fatal("the assistant starts to answer")
+	}
+	run(m, cmd)
+	for m.typing {
+		m.typeTick()
+	}
+	if len(b.asked) != 1 || b.asked[0] != "what is on port 8000?" {
+		t.Errorf("asked = %v", b.asked)
+	}
+	out := plain(renderEvent(lastEvent(m), 80))
+	if !strings.Contains(out, "port 8000 is a Python http server") || !strings.Contains(out, "curl -s http://10.0.0.5:8000/") {
+		t.Errorf("answer:\n%s", out)
+	}
+}
+
+func TestSlashAskIsTheSameAsTyping(t *testing.T) {
+	b := &fakeBackend{next: Suggestion{Rationale: "r", Command: "c"}}
+	m := liveModel(t, b)
+	cmdRun(m, "/ask is there a web server")
+	for m.typing {
+		m.typeTick()
+	}
+	if len(b.asked) != 1 || b.asked[0] != "is there a web server" {
+		t.Errorf("asked = %v", b.asked)
+	}
+	submit(m, "/ask")
+	if !strings.Contains(lastEvent(m).Text, "/ask needs a question") || len(b.asked) != 1 {
+		t.Errorf("an empty /ask explains itself: %q", lastEvent(m).Text)
+	}
+}
+
+func TestAnUnknownCommandIsSaidAndClearWipesTheStream(t *testing.T) {
+	m := liveModel(t, &fakeBackend{})
+	submit(m, "/wut")
+	if !strings.Contains(lastEvent(m).Text, "no command /wut") {
+		t.Errorf("entry = %q", lastEvent(m).Text)
+	}
+	submit(m, "/clear")
+	if len(m.events) != 0 {
+		t.Errorf("/clear wipes the stream: %d entries", len(m.events))
+	}
+}
+
+func TestANoticeAndAGreetingAreTheFirstLines(t *testing.T) {
+	m := newModel(t, Config{Notice: "a warning", Greeting: "set your target"})
+	if len(m.events) != 2 || m.events[0].Text != "a warning" || m.events[1].Text != "set your target" {
+		t.Fatalf("events = %+v", m.events)
+	}
+}
+
+func TestTheInputShowsACursorOnlyWhenFocused(t *testing.T) {
+	in := &input{}
+	in.handle(tea.KeyPressMsg{Code: 'a', Text: "a"})
+	focused := in.view(40, true)
+	blurred := in.view(40, false)
+	if strings.TrimRight(ansi.Strip(focused), " ") != strings.TrimRight(ansi.Strip(blurred), " ") {
+		t.Error("focus changes the look, not the text")
+	}
+	if focused == blurred {
+		t.Error("the cursor shows only with the keyboard")
+	}
+	// a long line scrolls so the cursor stays in view
+	long := &input{}
+	typeTextInput(long, strings.Repeat("x", 100))
+	v := ansi.Strip(long.view(20, true))
+	if lipgloss.Width(v) > 20 {
+		t.Errorf("the input is %d wide for a pane of 20", lipgloss.Width(v))
+	}
+}
+
+func typeTextInput(in *input, text string) {
+	for _, r := range text {
+		in.handle(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 }

@@ -30,6 +30,10 @@ type Config struct {
 	Context context.Context
 	// Notice is a line the stream starts with, such as a warning that matters for the whole session.
 	Notice string
+	// SessionName is what the session is called, shown on exit so it can be resumed; empty hides it.
+	SessionName string
+	// Greeting is shown under the notice when the panel starts, to tell the tester what to do first.
+	Greeting string
 	// Now returns the time of an entry; nil means the clock.
 	Now func() time.Time
 }
@@ -76,6 +80,8 @@ type (
 	}
 	spinMsg struct{}
 	typeMsg struct{}
+	// quitMsg ends the program after the farewell has been shown.
+	quitMsg struct{}
 )
 
 // Model is the panel: the stream, and the blocks its keys open.
@@ -99,6 +105,10 @@ type Model struct {
 	// lastAutoErr is the last failure of an automatic question that was shown, so that a model that
 	// is down is said once and not after every command.
 	lastAutoErr string
+	// in is the line the tester types.
+	in input
+	// quitting says the farewell is shown and the program is about to end.
+	quitting bool
 }
 
 // New returns the panel.
@@ -113,6 +123,9 @@ func New(cfg Config) *Model {
 	if cfg.Notice != "" {
 		m.system(cfg.Notice)
 	}
+	if cfg.Greeting != "" {
+		m.system(cfg.Greeting)
+	}
 	return m
 }
 
@@ -125,7 +138,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 	case tea.KeyPressMsg:
-		return m.key(msg.String())
+		return m.onKey(msg)
 	case FocusMsg:
 		m.focused = msg.Focused
 	case AppendMsg:
@@ -166,8 +179,101 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.spinTick()
 	case typeMsg:
 		return m.typeTick()
+	case quitMsg:
+		return m, tea.Quit
 	}
 	return m, nil
+}
+
+// onKey sends a key to the input, except ctrl+c, which starts a gentle exit. A submitted line is a
+// command or a message.
+func (m *Model) onKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.quitting {
+		return m, nil
+	}
+	if k.String() == "ctrl+c" {
+		return m, m.quit()
+	}
+	line, submitted, _ := m.in.handle(k)
+	if !submitted {
+		return m, nil
+	}
+	return m.submit(line)
+}
+
+// submit acts on a line the tester entered: a slash command, or, otherwise, a message to the assistant.
+func (m *Model) submit(line string) (tea.Model, tea.Cmd) {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return m, nil
+	}
+	if c, ok := parseCommand(line); ok {
+		return m.runCommand(c)
+	}
+	return m, m.ask(line)
+}
+
+// runCommand carries out a slash command.
+func (m *Model) runCommand(c command) (tea.Model, tea.Cmd) {
+	switch c.name {
+	case cmdExit:
+		return m, m.quit()
+	case cmdHelp:
+		m.toggle(blockHelp, commandHelp())
+	case cmdClear:
+		m.events = m.events[:0]
+	case cmdMap:
+		return m, m.openMap()
+	case cmdPipeline:
+		return m, m.openPipeline(strings.EqualFold(c.args, cmdNew))
+	case cmdNext:
+		return m, m.askNext(false)
+	case cmdCopy:
+		return m, m.copy()
+	case cmdAsk:
+		if c.args == "" {
+			m.system("/ask needs a question, for example: /ask what is on port 8000")
+			return m, nil
+		}
+		return m, m.ask(c.args)
+	default:
+		m.system("no command /" + c.name + "; /help lists them")
+	}
+	return m, nil
+}
+
+// quit shows the farewell and ends the program a moment later, so the exit is not abrupt.
+func (m *Model) quit() tea.Cmd {
+	if m.quitting {
+		return nil
+	}
+	m.quitting = true
+	m.system(m.farewell())
+	return tea.Tick(900*time.Millisecond, func(time.Time) tea.Msg { return quitMsg{} })
+}
+
+func (m *Model) farewell() string {
+	if m.cfg.SessionName == "" {
+		return "bye."
+	}
+	return "session " + m.cfg.SessionName + " saved. resume it with:  kagegami watch --case " + m.cfg.SessionName
+}
+
+// ask puts the tester's message in the stream and asks the assistant about it.
+func (m *Model) ask(question string) tea.Cmd {
+	m.events = append(m.events, Event{Kind: KindUser, Time: m.cfg.Now(), Text: question})
+	if m.cfg.Backend == nil {
+		m.system("nothing is connected to the panel yet")
+		return nil
+	}
+	t := NewTurn()
+	m.events = append(m.events, Event{Kind: KindAssistant, Time: m.cfg.Now(), Turn: t})
+	ctx := m.cfg.Context
+	call := func() tea.Msg {
+		s, err := m.cfg.Backend.Ask(ctx, question)
+		return nextMsg{turn: t, s: s, err: err}
+	}
+	return tea.Batch(m.startSpinning(), call)
 }
 
 // appendEntries adds entries, stamping any that came without a time.
@@ -178,26 +284,6 @@ func (m *Model) appendEntries(events []Event) {
 		}
 		m.events = append(m.events, e)
 	}
-}
-
-func (m *Model) key(s string) (tea.Model, tea.Cmd) {
-	switch s {
-	case "ctrl+c", "q":
-		return m, tea.Quit
-	case "?":
-		m.toggle(blockHelp, helpLines())
-	case "m":
-		return m, m.openMap()
-	case "p":
-		return m, m.openPipeline(false)
-	case "P":
-		return m, m.openPipeline(true)
-	case "n":
-		return m, m.askNext(false)
-	case "c":
-		return m, m.copy()
-	}
-	return m, nil
 }
 
 // copy puts the command of the latest suggestion on the clipboard.
@@ -450,22 +536,35 @@ func (m *Model) View() tea.View {
 	return v
 }
 
-// screen is the stream inside its outline.
+// screen is the stream and the input line inside the outline.
 func (m *Model) screen() string {
-	boxed := m.width >= minFrame && m.height >= 3
+	boxed := m.width >= minFrame && m.height >= 4
 	w, h := m.width, m.height
 	if boxed {
 		w, h = m.width-4, m.height-2 // the outline and a space on each side, and the top and bottom lines
 	}
-	return frame(m.lines(w, h), m.width, m.height, m.focused, "kagegami")
+	if h < 1 {
+		return frame(nil, m.width, m.height, m.focused, "kagegami")
+	}
+	// the last inner row is the input, with a blank row above it to set it apart
+	streamRows := max(h-2, 1)
+	rows := m.stream(w, streamRows)
+	for len(rows) < streamRows {
+		rows = append(rows, "")
+	}
+	if h >= 2 {
+		rows = append(rows, "")
+	}
+	rows = append(rows, m.in.view(w, m.focused))
+	return frame(rows, m.width, m.height, m.focused, "kagegami")
 }
 
-// lines lays out the entries one under the other and keeps the last lines that fit.
-func (m *Model) lines(width, height int) []string {
+// stream lays the entries out one under the other and keeps the last lines that fit.
+func (m *Model) stream(width, height int) []string {
 	if len(m.events) == 0 {
-		hint := "press ? for the keys"
+		hint := "type a message and press Enter, or /help for the commands"
 		if m.cfg.Live {
-			hint = "watching your shell: run a command in the other pane. ? shows the keys"
+			hint = "watching your shell. type to ask the assistant, /help for the commands"
 		}
 		return strings.Split(styleDim.Render(lipgloss.NewStyle().Width(max(width, 1)).Render(hint)), "\n")
 	}

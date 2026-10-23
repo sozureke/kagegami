@@ -19,20 +19,3 @@ func blockLines(name, text string) []string {
 	}
 	return lines
 }
-
-func key(k, what string) string {
-	return "  " + styleHi.Render(k) + "  " + styleMid.Render(what)
-}
-
-func helpLines() []string {
-	return []string{
-		styleHi.Render("keys"),
-		key("n", "ask for the next step"),
-		key("m", "the map (kept up to date while it is open)"),
-		key("p", "the pipeline: the latest, or a new one if there is none"),
-		key("P", "ask for a new pipeline"),
-		key("c", "copy the suggested command"),
-		key("?", "this help"),
-		key("q", "quit"),
-	}
-}

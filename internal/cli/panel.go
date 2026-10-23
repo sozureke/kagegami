@@ -81,7 +81,7 @@ func runPanel(cmd *cobra.Command, info BuildInfo, pane tmux.PaneID, caseName str
 	if err != nil {
 		return err
 	}
-	_, db, err := resolveCase(paths, caseName)
+	name, db, err := resolveCase(paths, caseName)
 	if err != nil {
 		return err
 	}
@@ -119,7 +119,11 @@ func runPanel(cmd *cobra.Command, info BuildInfo, pane tmux.PaneID, caseName str
 	if set.Remote {
 		notice = remoteNotice
 	}
-	model := tui.New(tui.Config{Version: "kagegami " + info.Version, Live: true, Backend: backend, Context: ctx, Auto: cfg.Panel.AutoSuggest, Copy: copyToClipboard, Notice: notice})
+	model := tui.New(tui.Config{
+		Version: "kagegami " + info.Version, Live: true, Backend: backend, Context: ctx,
+		Auto: cfg.Panel.AutoSuggest, Copy: copyToClipboard, Notice: notice,
+		SessionName: name, Greeting: panelGreeting(cmd.Context(), st),
+	})
 	prog := tea.NewProgram(model, tea.WithContext(ctx))
 
 	ag, err := agent.New(agent.Config{
@@ -256,6 +260,16 @@ func (b *panelBackend) tier2() *agent.Tier2 {
 	return &agent.Tier2{Provider: b.set.Tier2, Store: b.st, RawDir: b.rawDir, Options: opts}
 }
 
+// panelGreeting tells the tester what to do first: set a scope if there is none, or start running
+// commands if there is.
+func panelGreeting(ctx context.Context, st *store.Store) string {
+	e, err := engagement.Get(ctx, st)
+	if err != nil || engagement.Scope(e).IsEmpty() {
+		return "no scope is set yet, so the model stays off. Set it in the other pane:  kagegami case set --target <addr>  (or --scope). Then run your recon; I will read each command and say what is next. Type to ask me anything, /help for the commands."
+	}
+	return "watching for your commands on " + engagement.Scope(e).String() + ". Run your recon; I read each command and say what is next. Type to ask me anything, /help for the commands."
+}
+
 // ownCommand says whether a command is one of Kagegami's own (kagegami map, kagegami next ...): it is
 // the tester looking at the tool, not at the target.
 func ownCommand(cmd string) bool {
@@ -321,8 +335,19 @@ func (b *panelBackend) Next(ctx context.Context, auto bool) (tui.Suggestion, err
 	if err != nil {
 		return tui.Suggestion{}, adviceError(err)
 	}
-	s := res.Suggestion
-	return tui.Suggestion{Rationale: s.Rationale, Command: s.Command, Risk: s.Risk, Confidence: s.Confidence, NeedsRecon: s.NeedsRecon}, nil
+	return suggestion(res.Suggestion), nil
+}
+
+func (b *panelBackend) Ask(ctx context.Context, question string) (tui.Suggestion, error) {
+	res, err := b.tier2().Next(ctx, "The tester asks: "+oneLineCmd(question)+"\nAnswer their question from the map, the journal and <recent>. If a command would help them, give it; if not, leave the command empty and answer in the rationale.")
+	if err != nil {
+		return tui.Suggestion{}, adviceError(err)
+	}
+	return suggestion(res.Suggestion), nil
+}
+
+func suggestion(s advice.Suggestion) tui.Suggestion {
+	return tui.Suggestion{Rationale: s.Rationale, Command: s.Command, Risk: s.Risk, Confidence: s.Confidence, NeedsRecon: s.NeedsRecon}
 }
 
 // adviceError says in a sentence what a person can do about a failure of tier 2.

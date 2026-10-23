@@ -15,6 +15,8 @@ type Backend interface {
 	// finished, so the answer should start with what that command showed; otherwise it is the person
 	// who asks.
 	Next(ctx context.Context, auto bool) (Suggestion, error)
+	// Ask answers a free question from the tester, over the map, the journal and the recent commands.
+	Ask(ctx context.Context, question string) (Suggestion, error)
 }
 
 // Suggestion is the answer to Next.
