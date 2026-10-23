@@ -122,34 +122,55 @@ func (t *Tier1) Extract(ctx context.Context, command string, exitCode int, outpu
 
 // scope removes what is about an address outside the scope.
 func (t *Tier1) scope(d recon.StateDelta) (recon.StateDelta, []recon.Drop) {
-	if t.InScope == nil {
+	return keepInScope(d, t.InScope)
+}
+
+// keepInScope removes what is about an address outside the scope. A nil check allows everything.
+func keepInScope(d recon.StateDelta, in func(ip string) bool) (recon.StateDelta, []recon.Drop) {
+	if in == nil {
 		return d, nil
 	}
 	var out recon.StateDelta
 	var dropped []recon.Drop
 	for _, h := range d.Hosts {
-		if t.InScope(h.IP) {
+		if in(h.IP) {
 			out.Hosts = append(out.Hosts, h)
 		} else {
 			dropped = append(dropped, recon.Drop{Kind: recon.OutOfScope, Detail: h.IP})
 		}
 	}
 	for _, s := range d.Services {
-		if t.InScope(s.HostIP) {
+		if in(s.HostIP) {
 			out.Services = append(out.Services, s)
 		} else {
 			dropped = append(dropped, recon.Drop{Kind: recon.OutOfScope, Detail: s.HostIP})
 		}
 	}
 	for _, w := range d.WebPaths {
-		if w.HostIP == "" || t.InScope(w.HostIP) {
+		if w.HostIP == "" || in(w.HostIP) {
 			out.WebPaths = append(out.WebPaths, w)
 		} else {
 			dropped = append(dropped, recon.Drop{Kind: recon.OutOfScope, Detail: w.HostIP})
 		}
 	}
-	out.Findings, out.Notes = d.Findings, d.Notes
+	out.Findings = d.Findings
+	// A note that names an address that was left out would bring it back in words.
+	for _, n := range d.Notes {
+		if !namesAny(n.Text, dropped) {
+			out.Notes = append(out.Notes, n)
+		}
+	}
 	return out, dropped
+}
+
+// namesAny says whether the text mentions an address that was dropped.
+func namesAny(text string, dropped []recon.Drop) bool {
+	for _, d := range dropped {
+		if d.Kind == recon.OutOfScope && d.Detail != "" && strings.Contains(text, d.Detail) {
+			return true
+		}
+	}
+	return false
 }
 
 // request builds the request. The boundary is new for every request and is not found in the
@@ -363,8 +384,13 @@ const maxScopeNote = 5
 // they were left out. An address that the target's own text points at, and nobody is testing, is
 // something a person wants to know about; the entries themselves never reach the map.
 func (r Tier1Result) ScopeNote(command string) (recon.NoteDelta, bool) {
+	return scopeNote(command, r.Dropped)
+}
+
+// scopeNote makes the note for the entries that were left out for being outside the scope.
+func scopeNote(command string, dropped []recon.Drop) (recon.NoteDelta, bool) {
 	var addrs []string
-	for _, d := range r.Dropped {
+	for _, d := range dropped {
 		if d.Kind == recon.OutOfScope && !slices.Contains(addrs, d.Detail) {
 			addrs = append(addrs, d.Detail)
 		}

@@ -73,7 +73,11 @@ func (r *Registry) New(spec string, opts Options) (Provider, error) {
 	}
 	f, ok := r.factories[s.Provider]
 	if !ok {
-		return nil, fmt.Errorf("%w: there is no provider %q (known: %s)", ErrInvalidRequest, s.Provider, strings.Join(r.names(), ", "))
+		hint := ""
+		if _, has := r.factories["openrouter"]; has {
+			hint = "; a model at OpenRouter is written openrouter/<vendor>/<model>, for example openrouter/" + spec
+		}
+		return nil, fmt.Errorf("%w: there is no provider %q (known: %s%s)", ErrInvalidRequest, s.Provider, strings.Join(r.names(), ", "), hint)
 	}
 	return f(s.Model, opts)
 }

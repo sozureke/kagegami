@@ -116,6 +116,10 @@ func loadConfigOrDefault() (config.Config, error) {
 	return cfg, err
 }
 
+// remoteNotice is said whenever a model is not on this machine. Masking is not built yet, so it says
+// what goes out as it is.
+const remoteNotice = "a configured model is not on this machine: the commands you run, their output and the hosts on the map are sent to it as they are, because masking is not built yet. Use it on lab targets and made-up data only."
+
 // buildModelsForAdvice loads the configuration and makes the models tier 2 (and tier 1, counted
 // apart) needs, with usage recorded to the case. It warns once, to stderr, when a configured
 // model is not on this machine.
@@ -132,7 +136,7 @@ func buildModelsForAdvice(cmd *cobra.Command, st *store.Store) (*models.Set, err
 		return nil, err
 	}
 	if set.Remote {
-		fmt.Fprintln(cmd.ErrOrStderr(), "warning: a configured model is not on this machine; its input leaves the machine it runs on.")
+		fmt.Fprintln(cmd.ErrOrStderr(), "warning: "+remoteNotice)
 	}
 	return set, nil
 }

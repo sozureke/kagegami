@@ -30,6 +30,16 @@ type Config struct {
 	Capture    Capture          `yaml:"capture"`
 	Logging    Logging          `yaml:"logging"`
 	Splash     splash.Config    `yaml:"splash"`
+	Panel      Panel            `yaml:"panel"`
+}
+
+// Panel holds the settings of the side panel.
+type Panel struct {
+	// AutoSuggest makes the panel look at every command that is read by itself: it asks the model what
+	// the output shows and what to do next, and shows the answer in its stream, with no key pressed.
+	// Each answer costs a model call; commands that follow one another quickly are one question.
+	// false leaves that to the key n.
+	AutoSuggest bool `yaml:"auto_suggest"`
 }
 
 // Model names the models, as provider/model. The person chooses them: tier1 reads the output of
@@ -111,6 +121,7 @@ func Default() Config {
 		Capture:    Capture{Trigger: "shell-hooks", Ignore: []string{"cd", "ls", "clear", "pwd"}},
 		Logging:    Logging{Level: "info"},
 		Splash:     splash.DefaultConfig(),
+		Panel:      Panel{AutoSuggest: true},
 	}
 }
 

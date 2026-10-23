@@ -62,6 +62,28 @@ func (r *Repo) GetBlob(ctx context.Context, id int64) (OutputBlob, error) {
 	return scanBlob(r.q.QueryRowContext(ctx, `SELECT `+blobColumns+` FROM output_blob WHERE id = ?`, id))
 }
 
+// ListRecentBlobs returns the latest finished commands, oldest first, at most n of them. A command
+// that has not finished has no output to show yet and is left out.
+func (r *Repo) ListRecentBlobs(ctx context.Context, n int) ([]OutputBlob, error) {
+	if n < 1 {
+		return nil, invalid("recent blobs: %d is not a count", n)
+	}
+	rows, err := r.q.QueryContext(ctx, `SELECT `+blobColumns+` FROM output_blob WHERE finished_at IS NOT NULL ORDER BY id DESC LIMIT ?`, n)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []OutputBlob
+	for rows.Next() {
+		b, err := scanBlob(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append([]OutputBlob{b}, out...) // newest came first; keep the oldest first
+	}
+	return out, rows.Err()
+}
+
 func scanBlob(s scanner) (OutputBlob, error) {
 	var b OutputBlob
 	var exit, finished sql.NullInt64

@@ -712,3 +712,35 @@ func TestInTxAppliesEvidenceAllOrNothing(t *testing.T) {
 		t.Errorf("host did not keep its evidence link: %+v", hosts)
 	}
 }
+
+func TestListRecentBlobsGivesTheLatestFinishedOnesOldestFirst(t *testing.T) {
+	_, r, _ := newRepo(t)
+	var ids []int64
+	for i, cmd := range []string{"nmap a", "ffuf b", "curl c", "dig d"} {
+		b, err := r.CreateBlob(bg, cmd)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := r.FinishBlob(bg, b.ID, i, int64(i), strings.Repeat("a", 64)); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, b.ID)
+	}
+	if _, err := r.CreateBlob(bg, "still running"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := r.ListRecentBlobs(bg, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 || got[0].Cmd != "ffuf b" || got[1].Cmd != "curl c" || got[2].Cmd != "dig d" || got[2].ID != ids[3] {
+		t.Errorf("recent = %+v: the last three finished commands, oldest first, and not the one still running", got)
+	}
+	if all, _ := r.ListRecentBlobs(bg, 100); len(all) != 4 {
+		t.Errorf("%d commands, want 4", len(all))
+	}
+	if _, err := r.ListRecentBlobs(bg, 0); err == nil {
+		t.Error("a count of 0 must be refused")
+	}
+}

@@ -34,14 +34,26 @@ rules: ...
 <journal boundary="TOKEN">
 ...the folded journal (journalText)...
 </journal boundary="TOKEN">
+<recent boundary="TOKEN">
+...the latest commands, newest last, and the start of the output of the last one (recentText)...
+</recent boundary="TOKEN">
 <request>
 ...the tester's own words, or a default request...
 </request>
 ```
 
-`<case>` and `<request>` are the tester's own words and are not fenced. `<map>` and `<journal>`
-can hold text that came from the target (a banner, a page title, a tool's note), so both are
-fenced with the same random boundary on their opening and closing tags.
+`<case>` and `<request>` are the tester's own words and are not fenced. `<map>`, `<journal>` and
+`<recent>` can hold text that came from the target (a banner, a page title, a tool's note, the
+output of a command), so all three are fenced with the same random boundary on their opening and
+closing tags.
+
+**`<recent>` is what lets the agent react to a command.** The map is a summary, and a command that
+changes nothing on it (a `curl` that shows a 403) would be invisible. `<recent>` lists the last six
+commands the tester ran, skipping the ones that mean nothing (`cd`, `ls`, `clear`, and Kagegami's own),
+with the exit code of a failed one, and shows the first 30 lines (3 KiB) of the output of the last,
+cleaned of control codes and each line marked with `| ` so it cannot pass for a command. The blob of
+every command listed is citable, so `read_output` can fetch more. When the panel asks because a
+command has just finished, the request says so, and the rationale starts with what the output shows.
 
 **The boundary.** It is generated anew for every call and checked to be absent from the text it
 fences, so text inside the fence cannot contain the real closing tag, because the token was chosen

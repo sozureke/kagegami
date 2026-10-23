@@ -79,7 +79,13 @@ func renderEvent(e Event, width int) []string {
 		out := make([]string, 0, len(e.Lines)+1)
 		out = append(out, "") // a block is set apart from the stream above it
 		for _, l := range e.Lines {
-			out = append(out, indent+ansi.Truncate(l, text, "…"))
+			// a line that is too long goes on the next line, indented under its start
+			for i, part := range strings.Split(ansi.Wrap(l, text, ""), "\n") {
+				if i > 0 {
+					part = "  " + part
+				}
+				out = append(out, indent+ansi.Truncate(part, text, ""))
+			}
 		}
 		return out
 	}
@@ -104,11 +110,14 @@ func renderTurn(e Event, clock string, text int, indent string, gutter func(slot
 			out = append(out, indent+styleMid.Render(l))
 		}
 	}
-	if command != "" || t.State == turnCommand {
+	if len(t.Command) > 0 && (command != "" || t.State == turnCommand) {
 		box := styleBlock.Width(text).Render(command)
 		for _, l := range strings.Split(box, "\n") {
 			out = append(out, indent+l)
 		}
+	}
+	if t.State == turnDone && t.Meta != "" {
+		out = append(out, indent+styleDim.Render(t.Meta))
 	}
 	return out
 }

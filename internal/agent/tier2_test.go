@@ -411,9 +411,9 @@ func TestASuggestionLedByInjectionIsStillRejected(t *testing.T) {
 	}
 }
 
-func TestWrapUserOrdersBlocksCaseMapJournalRequest(t *testing.T) {
-	got := wrapUser("CASE\n", "MAP\n", "JOURNAL\n", "REQUEST", "tok")
-	order := []string{"<case>", "CASE", "</case>", `<map boundary="tok">`, "MAP", `</map boundary="tok">`, `<journal boundary="tok">`, "JOURNAL", `</journal boundary="tok">`, "<request>", "REQUEST", "</request>"}
+func TestWrapUserOrdersBlocksCaseMapJournalRecentRequest(t *testing.T) {
+	got := wrapUser("CASE\n", "MAP\n", "JOURNAL\n", "RECENT\n", "REQUEST", "tok")
+	order := []string{"<case>", "CASE", "</case>", `<map boundary="tok">`, "MAP", `</map boundary="tok">`, `<journal boundary="tok">`, "JOURNAL", `</journal boundary="tok">`, `<recent boundary="tok">`, "RECENT", `</recent boundary="tok">`, "<request>", "REQUEST", "</request>"}
 	last := 0
 	for _, want := range order {
 		i := strings.Index(got[last:], want)

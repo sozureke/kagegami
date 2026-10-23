@@ -31,6 +31,10 @@ type Config struct {
 	// Tier1 reads the output of commands that no parser matched; nil means such commands are
 	// recorded and not read.
 	Tier1 *Tier1
+	// Scope returns the scope of the engagement as it is now, so that a change of it is seen at
+	// once. What a command found about an address outside it is left off the map, whoever read
+	// the output; and with an empty scope no model is called. Nil means no scope is enforced.
+	Scope func(ctx context.Context) ScopeCheck
 	// Logger receives debug lines about what was done and dropped; nil discards them.
 	Logger *slog.Logger
 	// QueueSize is how many commands wait for the worker; zero means 8. When it is full the
@@ -44,15 +48,28 @@ type Config struct {
 	OnUpdate func(Update)
 }
 
+// ScopeCheck is the part of a scope the agent needs.
+type ScopeCheck interface {
+	Contains(ip string) bool
+	IsEmpty() bool
+}
+
 // Update tells what became of a command.
 type Update struct {
 	Seq    int
 	Cmd    string
 	BlobID int64
+	// Exit is the exit code of the command; 0 for one that was aborted, which has none.
+	Exit int
 	// By says what read the output: "parser nmap", "tier1", or "" if nothing did.
 	By string
 	// Skipped is why the command was not read, if it was not.
 	Skipped terminal.Reason
+	// Queued marks the first update of a command that passed the filter: it will be read, and the
+	// update comes at once, before the reading (which may wait for a model).
+	Queued bool
+	// Handled marks the last update of a command that was read.
+	Handled bool
 	Added   pipeline.Added
 	// Err is a failure that stopped the command from being read or stored.
 	Err error
@@ -143,18 +160,23 @@ func (a *Agent) finished(ctx context.Context, e terminal.Event, q *queue) {
 		a.log.Warn("the output of a command was not recorded completely", "seq", e.Seq, "err", e.Err)
 		a.note(ctx, nil, fmt.Sprintf("the output of %q could not be recorded completely: %v", short(e.Cmd), firstLine(e.Err.Error())))
 	}
+	exit := e.End.ExitCode
+	if e.End.Aborted {
+		exit = 0
+	}
 	if !recorded {
-		a.update(Update{Seq: e.Seq, Cmd: e.Cmd, Err: e.Err})
+		a.update(Update{Seq: e.Seq, Cmd: e.Cmd, Exit: exit, Err: e.Err})
 		return
 	}
 	if a.cfg.Filter != nil {
 		if reason := a.cfg.Filter.Judge(e.Cmd, e.End, info.Size); reason != terminal.ReasonNone {
 			a.log.Debug("command not read", "seq", e.Seq, "blob", info.ID, "reason", string(reason))
-			a.update(Update{Seq: e.Seq, Cmd: e.Cmd, BlobID: info.ID, Skipped: reason})
+			a.update(Update{Seq: e.Seq, Cmd: e.Cmd, BlobID: info.ID, Exit: exit, Skipped: reason})
 			return
 		}
 	}
-	if dropped := q.push(job{seq: e.Seq, cmd: e.Cmd, exit: e.End.ExitCode, blobID: info.ID}); dropped != nil {
+	a.update(Update{Seq: e.Seq, Cmd: e.Cmd, BlobID: info.ID, Exit: exit, Queued: true})
+	if dropped := q.push(job{seq: e.Seq, cmd: e.Cmd, exit: exit, blobID: info.ID}); dropped != nil {
 		a.log.Debug("queue full, a command was skipped", "seq", dropped.seq, "blob", dropped.blobID)
 	}
 }
@@ -187,7 +209,7 @@ func skipNote(skipped []job) string {
 
 // handle reads the output of one command and puts what is in it on the map.
 func (a *Agent) handle(ctx context.Context, j job) {
-	u := Update{Seq: j.seq, Cmd: j.cmd, BlobID: j.blobID}
+	u := Update{Seq: j.seq, Cmd: j.cmd, BlobID: j.blobID, Exit: j.exit, Handled: true}
 	text, err := a.cleanedText(j.blobID)
 	if err != nil {
 		u.Err = err
@@ -208,6 +230,14 @@ func (a *Agent) handle(ctx context.Context, j job) {
 		}
 	}
 
+	var inScope func(string) bool
+	scoped := false
+	if a.cfg.Scope != nil {
+		if sc := a.cfg.Scope(ctx); sc != nil && !sc.IsEmpty() {
+			inScope, scoped = sc.Contains, true
+		}
+	}
+
 	switch {
 	case len(parsers) > 0:
 		u.By = "parser " + strings.Join(parsers, "+")
@@ -215,7 +245,12 @@ func (a *Agent) handle(ctx context.Context, j job) {
 			// the tool failed: the fact is worth keeping, and the model is not asked
 			delta.Notes = append(delta.Notes, recon.NoteDelta{Text: fmt.Sprintf("%s exited with code %d: %s", strings.Join(parsers, "+"), j.exit, firstText(text))})
 		}
-	case a.cfg.Tier1 != nil:
+		var dropped []recon.Drop
+		delta, dropped = keepInScope(delta, inScope)
+		if n, ok := scopeNote(j.cmd, dropped); ok {
+			delta.Notes = append(delta.Notes, n)
+		}
+	case a.cfg.Tier1 != nil && (a.cfg.Scope == nil || scoped):
 		u.By = "tier1"
 		res, err := a.cfg.Tier1.Extract(ctx, j.cmd, j.exit, text)
 		for _, d := range res.Dropped {

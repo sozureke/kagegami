@@ -27,7 +27,9 @@ type Turn struct {
 	Spin      int
 	Rationale []rune
 	Command   []rune
-	shown     int
+	// Meta is a dim line under a finished answer, such as its risk.
+	Meta  string
+	shown int
 }
 
 // NewTurn starts a turn that is waiting for the model.

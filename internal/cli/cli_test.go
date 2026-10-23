@@ -434,13 +434,29 @@ func TestNextAndPipelineFlags(t *testing.T) {
 	}
 }
 
-func TestWatchNeedsATerminal(t *testing.T) {
+func TestWatchNeedsTmux(t *testing.T) {
+	t.Setenv("TMUX", "") // a test run inside tmux must never split the person's own window
+	t.Setenv("TMUX_PANE", "")
 	code, stdout, stderr := runCLI(t, "watch", "--no-anim")
-	if code != 1 || stdout != "" || !strings.Contains(stderr, "needs a terminal") {
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "inside tmux") {
 		t.Errorf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
 	if code, _, stderr := runCLI(t, "watch", "--demo"); code != 2 || !strings.Contains(stderr, "unknown flag") {
 		t.Errorf("--demo is gone: code=%d stderr=%q", code, stderr)
+	}
+}
+
+func TestPanelNeedsATerminalAndAPane(t *testing.T) {
+	if code, _, stderr := runCLI(t, "panel", "--pane", "%1"); code != 1 || !strings.Contains(stderr, "needs a terminal") {
+		t.Errorf("code=%d stderr=%q", code, stderr)
+	}
+	if code, _, _ := runCLI(t, "panel", "--bogus"); code != 2 {
+		t.Errorf("an unknown flag is a usage error: %d", code)
+	}
+	for _, c := range newRootCmd(io.Discard, io.Discard, testInfo).Commands() {
+		if c.Name() == "panel" && !c.Hidden {
+			t.Error("panel is run by watch, not typed: it must stay out of the help")
+		}
 	}
 }
 
