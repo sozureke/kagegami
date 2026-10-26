@@ -340,6 +340,60 @@ func TestCaseSetAndShow(t *testing.T) {
 	})
 }
 
+func TestFindingAdd(t *testing.T) {
+	home := t.TempDir()
+	caseWithHost(t, home, "box")
+
+	t.Run("recorded and shown on the map", func(t *testing.T) {
+		code, out, stderr := runCLI(t, "finding", "add", "Outdated OpenSSH 7.2p2, CVE-2016-0777", "--severity", "high", "--case", "box")
+		if code != 0 || stderr != "" || !strings.Contains(out, "[high] Outdated OpenSSH 7.2p2, CVE-2016-0777") {
+			t.Errorf("code %d, stderr %q, stdout %q", code, stderr, out)
+		}
+
+		_, mapOut, _ := runCLI(t, "map", "--case", "box")
+		if !strings.Contains(mapOut, "! [high] Outdated OpenSSH 7.2p2, CVE-2016-0777") {
+			t.Errorf("the finding is not on the map:\n%s", mapOut)
+		}
+	})
+	t.Run("json", func(t *testing.T) {
+		code, out, _ := runCLI(t, "finding", "add", "Default creds on the admin panel", "--severity", "critical", "--description", "admin:admin", "--case", "box")
+		if code != 0 {
+			t.Fatalf("code %d: %s", code, out)
+		}
+		code, out, _ = runCLI(t, "finding", "add", "a second one, for the --json test", "--severity", "low", "--case", "box", "--json")
+		var v struct {
+			ID          int64  `json:"id"`
+			Severity    string `json:"severity"`
+			Title       string `json:"title"`
+			Description string `json:"description"`
+		}
+		if code != 0 || json.Unmarshal([]byte(out), &v) != nil || v.ID == 0 || v.Severity != "low" || v.Title != "a second one, for the --json test" {
+			t.Errorf("code %d, %+v\n%s", code, v, out)
+		}
+	})
+	t.Run("mistakes are usage errors and add nothing", func(t *testing.T) {
+		for _, args := range [][]string{
+			{"finding", "add"},
+			{"finding", "add", "a title", "--severity", "urgent", "--case", "box"},
+			{"finding", "add", "   ", "--severity", "low", "--case", "box"},
+		} {
+			if code, out, stderr := runCLI(t, args...); code != 2 || out != "" || stderr == "" {
+				t.Errorf("%v: code %d, stdout %q, stderr %q", args, code, out, stderr)
+			}
+		}
+	})
+	t.Run("a case that does not exist", func(t *testing.T) {
+		if code, _, stderr := runCLI(t, "finding", "add", "t", "--severity", "low", "--case", "nope"); code != 1 || !strings.Contains(stderr, `no case "nope"`) {
+			t.Errorf("code %d, stderr %q", code, stderr)
+		}
+	})
+	t.Run("the finding command alone shows its help", func(t *testing.T) {
+		if code, out, _ := runCLI(t, "finding"); code != 0 || !strings.Contains(out, "add") {
+			t.Errorf("code %d:\n%s", code, out)
+		}
+	})
+}
+
 func TestNextWithoutScope(t *testing.T) {
 	home := t.TempDir()
 	caseWithHost(t, home, "no-scope")

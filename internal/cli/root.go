@@ -59,6 +59,7 @@ func newRootCmd(stdout, stderr io.Writer, info BuildInfo) *cobra.Command {
 		newReportCmd(),
 		newMapCmd(),
 		newCaseCmd(),
+		newFindingCmd(),
 		newVersionCmd(info),
 	)
 	return root

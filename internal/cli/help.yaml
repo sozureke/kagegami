@@ -107,5 +107,22 @@ commands:
       target is an address or a network, the scope becomes the target.
   case show:
     short: Show what a case is about
+  finding:
+    short: Record a finding by hand
+    long: |-
+      A finding is something worth a line in the report. Right now a person is the only
+      source of them: parsers only add hosts, services and paths, and the model is never
+      trusted to decide on its own that something belongs in the report (a target's own
+      banner could otherwise write itself a line).
+  finding add:
+    short: Record a finding
+    long: |-
+      Add a finding to the case, with how serious it is:
+
+          kagegami finding add "Outdated OpenSSH 7.2p2, CVE-2016-0777" --severity high
+          kagegami finding add "Default credentials on the admin panel" --severity critical --description "..."
+
+      --severity is one of info, low, medium, high or critical. The finding shows up in
+      kagegami map at once. --json prints the added finding as JSON.
   version:
     short: Print version information
