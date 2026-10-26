@@ -34,6 +34,8 @@ type Config struct {
 	SessionName string
 	// Greeting is shown under the notice when the panel starts, to tell the tester what to do first.
 	Greeting string
+	// Welcome is the card the stream starts with; nil means none.
+	Welcome *Card
 	// Now returns the time of an entry; nil means the clock.
 	Now func() time.Time
 }
@@ -133,6 +135,9 @@ func New(cfg Config) *Model {
 		cfg.Context = context.Background()
 	}
 	m := &Model{cfg: cfg, width: 80, height: 24, loading: map[string]bool{}}
+	if cfg.Welcome != nil {
+		m.events = append(m.events, Event{Kind: KindCard, Card: cfg.Welcome})
+	}
 	for _, line := range strings.Split(cfg.Notice, "\n") { // one entry per line
 		if line != "" {
 			m.system(line)

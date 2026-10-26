@@ -123,7 +123,7 @@ func runPanel(cmd *cobra.Command, info BuildInfo, pane tmux.PaneID, caseName str
 	model := tui.New(tui.Config{
 		Version: "kagegami " + info.Version, Live: true, Backend: backend, Context: ctx,
 		Auto: cfg.Panel.AutoSuggest, Copy: copyToClipboard, Notice: notice,
-		SessionName: name, Greeting: panelGreeting(cmd.Context(), st),
+		SessionName: name, Welcome: panelCard(ctx, st, info.Version, name, cfg.Model),
 	})
 	prog := tea.NewProgram(model, tea.WithContext(ctx))
 
@@ -262,14 +262,59 @@ func (b *panelBackend) tier2() *agent.Tier2 {
 	return &agent.Tier2{Provider: b.set.Tier2, Store: b.st, RawDir: b.rawDir, Options: opts}
 }
 
-// panelGreeting tells the tester what to do first: set a scope if there is none, or start running
-// commands if there is.
-func panelGreeting(ctx context.Context, st *store.Store) string {
+// panelCard is the welcome the panel opens with. The tips depend on where the case stands: with no
+// scope the first thing to do is to name the target, and with one it is to run recon.
+func panelCard(ctx context.Context, st *store.Store, version, name string, m config.Model) *tui.Card {
+	c := &tui.Card{Title: "kagegami " + version, Facts: append([]string{"case " + name}, modelFacts(m)...)}
+	if dir, err := os.Getwd(); err == nil {
+		c.Facts = append(c.Facts, tildePath(dir))
+	}
+
 	e, err := engagement.Get(ctx, st)
 	if err != nil || engagement.Scope(e).IsEmpty() {
-		return "no scope is set yet, so the model stays off. Set it in the other pane:  kagegami case set --target <addr>  (or --scope). Then run your recon; I will read each command and say what is next. Type to ask me anything, /help for the commands."
+		c.Heading = "Welcome!"
+		c.Tips = []string{
+			"What are we testing? Type the target: an address, a network or a range, like 10.10.10.5.",
+			"Or describe the task with the address in it: get the user flag on 10.10.10.5",
+			"/ lists the commands",
+		}
+		return c
 	}
-	return "watching for your commands on " + engagement.Scope(e).String() + ". Run your recon; I read each command and say what is next. Type to ask me anything, /help for the commands."
+	c.Heading = "Welcome back!"
+	c.Facts = append(c.Facts, "target "+engagement.Scope(e).String())
+	c.Tips = []string{
+		"Run your recon in the other pane: I read every command and say what is next.",
+		"Ask me anything below, or / for the commands.",
+	}
+	return c
+}
+
+// modelFacts name the two models, one to a line, without the provider in front: "tier 1 · gpt-4o-mini".
+func modelFacts(m config.Model) []string {
+	short := func(spec string) string {
+		if i := strings.LastIndex(spec, "/"); i >= 0 {
+			return spec[i+1:]
+		}
+		return spec
+	}
+	t1, t2 := short(m.Tier1), short(m.Tier2Spec())
+	if m.Tier2 == "" || m.Tier2 == m.Tier1 {
+		return []string{"tier 1 · " + t1, "tier 2 · same model"}
+	}
+	return []string{"tier 1 · " + t1, "tier 2 · " + t2}
+}
+
+// tildePath writes a path under the home directory as ~/...
+func tildePath(p string) string {
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		if p == home {
+			return "~"
+		}
+		if rest, ok := strings.CutPrefix(p, home+string(filepath.Separator)); ok {
+			return "~/" + rest
+		}
+	}
+	return p
 }
 
 // ownCommand says whether a command is one of Kagegami's own (kagegami map, kagegami next ...): it is

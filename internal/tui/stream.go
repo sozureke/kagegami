@@ -74,7 +74,12 @@ func renderEvent(e Event, width int) []string {
 	case KindFinding:
 		return hang(gutter("!", " ", styleFind, styleFind), e.Text, styleFind)
 	case KindSystem:
-		return hang(gutter(clock, e.Glyph, styleDim, styleLo), e.Text, styleLo)
+		return hang(gutter(clock, e.Glyph, styleDim, styleMid), e.Text, styleText)
+	case KindCard:
+		if e.Card == nil {
+			return nil
+		}
+		return renderCard(*e.Card, width)
 	case KindAssistant:
 		return renderTurn(e, clock, text, indent, gutter)
 	case KindBlock:
@@ -100,16 +105,16 @@ func renderTurn(e Event, clock string, text int, indent string, gutter func(slot
 		return nil
 	}
 	if t.State == turnThinking {
-		return []string{gutter(clock, "›", styleDim, styleMid) + styleMid.Render(string(spinFrames[t.Spin])+" thinking")}
+		return []string{gutter(clock, "›", styleDim, styleMid) + styleHi.Render(workFrame(t.Spin)) + styleText.Render(" thinking")}
 	}
 	rationale, command := t.Shown()
 	var out []string
 	for i, l := range strings.Split(lipgloss.NewStyle().Width(text).Render(rationale), "\n") {
 		l = strings.TrimRight(l, " ")
 		if i == 0 {
-			out = append(out, gutter(clock, "›", styleDim, styleMid)+styleMid.Render(l))
+			out = append(out, gutter(clock, "›", styleDim, styleMid)+styleText.Render(l))
 		} else {
-			out = append(out, indent+styleMid.Render(l))
+			out = append(out, indent+styleText.Render(l))
 		}
 	}
 	if len(t.Command) > 0 && (command != "" || t.State == turnCommand) {
