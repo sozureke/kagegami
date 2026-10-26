@@ -175,10 +175,12 @@ func TestSplitWindowArguments(t *testing.T) {
 		{"keep focus", SplitOptions{Target: "%1", KeepFocus: true}, []string{"split-window", "-P", "-F", "#{pane_id}", "-t", "%1", "-d"}},
 		{"percent", SplitOptions{Target: "%1", Percent: 40}, []string{"split-window", "-P", "-F", "#{pane_id}", "-t", "%1", "-l", "40%"}},
 		{"command", SplitOptions{Target: "%1", Command: "kagegami panel"}, []string{"split-window", "-P", "-F", "#{pane_id}", "-t", "%1", "kagegami panel"}},
+		{"directory", SplitOptions{Target: "%1", Dir: "/work/my box"}, []string{"split-window", "-P", "-F", "#{pane_id}", "-t", "%1", "-c", "/work/my box"}},
+		{"environment", SplitOptions{Target: "%1", Env: []string{"A=1", "KEY=a b=c"}}, []string{"split-window", "-P", "-F", "#{pane_id}", "-t", "%1", "-e", "A=1", "-e", "KEY=a b=c"}},
 		{
 			"everything",
-			SplitOptions{Target: "%3", Horizontal: true, KeepFocus: true, Percent: 35, Command: "x"},
-			[]string{"split-window", "-P", "-F", "#{pane_id}", "-t", "%3", "-h", "-d", "-l", "35%", "x"},
+			SplitOptions{Target: "%3", Horizontal: true, KeepFocus: true, Percent: 35, Env: []string{"K=v"}, Command: "x"},
+			[]string{"split-window", "-P", "-F", "#{pane_id}", "-t", "%3", "-h", "-d", "-l", "35%", "-e", "K=v", "x"},
 		},
 	}
 	for _, tt := range tests {
@@ -209,6 +211,21 @@ func TestSplitWindowValidation(t *testing.T) {
 	}
 	if r.count() != 3 {
 		t.Errorf("tmux ran %d times, want 3 (only for the valid percents)", r.count())
+	}
+}
+
+func TestSplitWindowRefusesAnEnvironmentThatIsNotNameEqualsValue(t *testing.T) {
+	c, r := newFake(inside("%0"), func([]string) (string, error) { return "%9", nil })
+	for _, bad := range []string{"", "NOEQUALS", "=v", "1A=v", "A B=v", "A;rm=v", "A-B=v", "A=line\nbreak", "A=nul\x00", "A=cr\r"} {
+		if _, err := c.SplitWindow(bg, SplitOptions{Target: "%1", Env: []string{bad}}); !errors.Is(err, ErrInvalid) {
+			t.Errorf("env %q: err = %v, want ErrInvalid", bad, err)
+		}
+	}
+	if r.count() != 0 {
+		t.Errorf("tmux ran %d times for a bad environment", r.count())
+	}
+	if _, err := c.SplitWindow(bg, SplitOptions{Target: "%1", Env: []string{"_OK_1=", "a=b"}}); err != nil {
+		t.Errorf("an empty value and a lower-case name are fine: %v", err)
 	}
 }
 
@@ -522,5 +539,47 @@ func TestSplitAndKillFromManyGoroutines(t *testing.T) {
 	wg.Wait()
 	if len(c.owned) != 0 {
 		t.Errorf("%d panes are still marked as ours", len(c.owned))
+	}
+}
+
+func TestPaneFocusedAsksOnceAndReadsTheAnswer(t *testing.T) {
+	answer := "1\n"
+	c, r := newFake(inside("%0"), func([]string) (string, error) { return answer, nil })
+	ok, err := c.PaneFocused(bg, "%4")
+	if err != nil || !ok {
+		t.Fatalf("PaneFocused = %v, %v", ok, err)
+	}
+	if r.count() != 1 {
+		t.Errorf("%d calls: polling must cost one", r.count())
+	}
+	got := strings.Join(r.last(), " ")
+	if got != "display-message -p -t %4 #{&&:#{pane_active},#{window_active}}" {
+		t.Errorf("command = %q: the pane must be active in a window that is active", got)
+	}
+	for _, no := range []string{"0", "", "10", "yes"} {
+		answer = no
+		if ok, err := c.PaneFocused(bg, "%4"); err != nil || ok {
+			t.Errorf("answer %q: focused = %v, %v", no, ok, err)
+		}
+	}
+	if _, err := c.PaneFocused(bg, "%4;kill-server"); err == nil {
+		t.Error("a bad pane id must be refused before tmux is asked")
+	}
+	if c2, _ := newFake(inside("%0"), func([]string) (string, error) { return "", errors.New("no server") }); true {
+		if _, err := c2.PaneFocused(bg, "%4"); err == nil {
+			t.Error("a failure of tmux must be returned")
+		}
+	}
+}
+
+func TestSplitWindowRefusesADirectoryThatIsNotAnAbsolutePathOnOneLine(t *testing.T) {
+	c, r := newFake(inside("%0"), func([]string) (string, error) { return "%9", nil })
+	for _, bad := range []string{"relative/dir", "-c", "/a\nb", "/a\x00b"} {
+		if _, err := c.SplitWindow(bg, SplitOptions{Target: "%1", Dir: bad}); !errors.Is(err, ErrInvalid) {
+			t.Errorf("dir %q: err = %v, want ErrInvalid", bad, err)
+		}
+	}
+	if r.count() != 0 {
+		t.Errorf("tmux ran %d times for a bad directory", r.count())
 	}
 }

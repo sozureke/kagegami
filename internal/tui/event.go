@@ -14,6 +14,8 @@ const (
 	KindAssistant             // an answer of tier 2
 	KindSystem                // Kagegami changed something itself
 	KindBlock                 // a block opened by a key: the map, the pipeline, the help
+	KindUser                  // a message the tester typed in the panel
+	KindCard                  // the welcome card at the top of the stream
 )
 
 // The glyphs of the lines Kagegami writes about its own actions: single width and monochrome, so
@@ -39,4 +41,6 @@ type Event struct {
 	Block string
 	// Lines are the lines of a block, already styled.
 	Lines []string
+	// Card is the welcome card, for an entry of KindCard.
+	Card *Card
 }

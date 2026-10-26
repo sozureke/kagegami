@@ -11,7 +11,9 @@ import (
 	"github.com/sozureke/kagegami/internal/advice"
 	"github.com/sozureke/kagegami/internal/engagement"
 	"github.com/sozureke/kagegami/internal/mapview"
+	"github.com/sozureke/kagegami/internal/raw"
 	"github.com/sozureke/kagegami/internal/store"
+	"github.com/sozureke/kagegami/internal/terminal"
 )
 
 // ContextOptions bound what tier 2 is given.
@@ -23,6 +25,17 @@ type ContextOptions struct {
 	JournalEntries int
 	// PathsPerService bounds the web paths listed under a service; zero means 12.
 	PathsPerService int
+	// RecentCommands is how many of the latest commands are listed; zero means 6.
+	RecentCommands int
+	// RecentLines and RecentBytes bound the start of the output of the last command that is shown;
+	// zero means 30 lines and 3 KiB.
+	RecentLines, RecentBytes int
+	// RawDir is where the output of commands is kept. Without it the commands are listed and none
+	// of their output is shown.
+	RawDir string
+	// Skip says that a command is not worth showing (cd, ls, clear): it is recorded, and tier 2
+	// does not need it. Nil shows every command.
+	Skip func(cmd string, exit int, size int64) bool
 }
 
 func (o ContextOptions) withDefaults() ContextOptions {
@@ -35,6 +48,15 @@ func (o ContextOptions) withDefaults() ContextOptions {
 	if o.PathsPerService <= 0 {
 		o.PathsPerService = 12
 	}
+	if o.RecentCommands <= 0 {
+		o.RecentCommands = 6
+	}
+	if o.RecentLines <= 0 {
+		o.RecentLines = 30
+	}
+	if o.RecentBytes <= 0 {
+		o.RecentBytes = 3 << 10
+	}
 	return o
 }
 
@@ -44,6 +66,9 @@ type AdviceContext struct {
 	Case string
 	// Map is the map as dense text. It holds text that came from the target.
 	Map string
+	// Recent is what the tester ran lately: the latest commands, newest last, and the start of the
+	// output of the last one. It is what just happened, and it holds text from the target.
+	Recent string
 	// Journal is the folded journal. Entries that did not come from the tester hold text from the
 	// target or from tools.
 	Journal string
@@ -79,6 +104,7 @@ func LoadAdviceContext(ctx context.Context, st *store.Store, opts ContextOptions
 		Case:    caseBlock(e, sc.String()),
 		Map:     mapText(view, opts, cites),
 		Journal: journalText(entries, opts.JournalEntries, cites),
+		Recent:  recentText(ctx, st, opts, cites),
 		Empty:   len(view.Hosts) == 0,
 		Check:   advice.Context{Scope: sc, Hosts: map[string]bool{}, Hostnames: map[string]string{}, Services: map[string]bool{}},
 		Citable: cites.ids,
@@ -93,6 +119,72 @@ func LoadAdviceContext(ctx context.Context, st *store.Store, opts ContextOptions
 		}
 	}
 	return out, nil
+}
+
+// recentText lists the latest commands and shows the start of the output of the last one. A command
+// is written as the tester typed it; its output came from the target. Both are given to the model
+// inside a fence, and the blob of each is citable, so that read_output can fetch more.
+func recentText(ctx context.Context, st *store.Store, o ContextOptions, cites *citations) string {
+	blobs, err := st.Repo().ListRecentBlobs(ctx, o.RecentCommands*3)
+	if err != nil {
+		return "(the latest commands could not be read)\n"
+	}
+	var shown []store.OutputBlob
+	for _, b := range blobs {
+		exit := 0
+		if b.ExitCode != nil {
+			exit = *b.ExitCode
+		}
+		if o.Skip == nil || !o.Skip(b.Cmd, exit, b.Size) {
+			shown = append(shown, b)
+		}
+	}
+	if len(shown) > o.RecentCommands {
+		shown = shown[len(shown)-o.RecentCommands:]
+	}
+	if len(shown) == 0 {
+		return "(no command has been run yet)\n"
+	}
+	var b strings.Builder
+	for _, blob := range shown {
+		cites.ids[blob.ID] = true
+		exit := ""
+		if blob.ExitCode != nil && *blob.ExitCode != 0 {
+			exit = fmt.Sprintf(" · exit %d", *blob.ExitCode)
+		}
+		fmt.Fprintf(&b, "$ %s%s (blob %d)\n", oneLine(blob.Cmd, 300), exit, blob.ID)
+	}
+	last := shown[len(shown)-1]
+	if excerpt := outputStart(o.RawDir, last.ID, o.RecentLines, o.RecentBytes); excerpt != "" {
+		fmt.Fprintf(&b, "start of the output of the last command (blob %d):\n%s", last.ID, excerpt)
+	}
+	return b.String()
+}
+
+// outputStart returns the first lines of a stored output, cleaned of control codes, each line cut
+// short and marked so that it cannot be mistaken for the lines around it. It returns "" when there
+// is nothing to show.
+func outputStart(dir string, id int64, lines, maxBytes int) string {
+	if dir == "" {
+		return ""
+	}
+	r, err := raw.Open(dir, id, raw.Limits{MaxLines: lines, MaxBytes: maxBytes, MaxLineBytes: 300})
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = r.Close() }()
+	sl, err := r.Head(lines)
+	if err != nil || len(sl.Lines) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, l := range sl.Lines {
+		fmt.Fprintf(&b, "| %s\n", oneLine(terminal.CleanString(l.Text), 300))
+	}
+	if sl.Truncated || sl.Total > len(sl.Lines) {
+		fmt.Fprintf(&b, "| [... %d more lines; ask for them with read_output ...]\n", max(sl.Total-len(sl.Lines), 0))
+	}
+	return b.String()
 }
 
 func caseBlock(e store.Engagement, scope string) string {

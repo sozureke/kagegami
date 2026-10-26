@@ -1,0 +1,5 @@
+$ nmap -sV 10.10.10.5 (blob 1)
+$ gobuster dir -u http://10.10.10.5:80 -w /usr/share/wordlists/dirb/common.txt (blob 2)
+start of the output of the last command (blob 2):
+| /admin (Status: 403) [Size: 277]
+| /index.html (Status: 200) [Size: 10918]

@@ -6,12 +6,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/sozureke/kagegami/internal/config"
 	"github.com/sozureke/kagegami/internal/store"
 	"github.com/sozureke/kagegami/pkg/llm"
 	"github.com/sozureke/kagegami/pkg/llm/ollama"
+	"github.com/sozureke/kagegami/pkg/llm/openrouter"
 )
 
 // Tier names for usage records.
@@ -36,6 +38,9 @@ type Options struct {
 	Retry llm.RetryOptions
 	// Registry lets a test supply the providers; nil uses the real ones.
 	Registry *llm.Registry
+	// Getenv reads the environment, which is where the key of a cloud provider comes from; nil
+	// means the environment of the process.
+	Getenv func(string) string
 }
 
 // Set holds the models of a session.
@@ -57,6 +62,13 @@ func Build(ctx context.Context, cfg config.Config, o Options) (*Set, error) {
 	if reg == nil {
 		reg = llm.NewRegistry()
 		if err := ollama.Register(reg, ollama.Config{BaseURL: cfg.Providers.Ollama.BaseURL}); err != nil {
+			return nil, err
+		}
+		getenv := o.Getenv
+		if getenv == nil {
+			getenv = os.Getenv
+		}
+		if err := openrouter.Register(reg, getenv); err != nil {
 			return nil, err
 		}
 	}

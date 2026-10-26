@@ -81,8 +81,12 @@ var ErrInvalid = errors.New("invalid advice")
 const (
 	maxText    = 2000
 	maxCommand = 500
-	maxSteps   = 12
-	maxCmds    = 5
+	// maxSteps and maxCmds are how much of a plan is kept. A model that writes more is not refused:
+	// what it listed first is what it thought most useful, and that is what stays.
+	maxSteps = 12
+	maxCmds  = 5
+	// maxRawSteps is the most steps read at all; more than that is not a plan but a runaway.
+	maxRawSteps = 100
 )
 
 // ParseSuggestion reads a Suggestion from JSON strictly: unknown fields and text after the value
@@ -132,8 +136,8 @@ func ParsePipeline(data []byte) (Pipeline, error) {
 	if err := firstError(length("summary", p.Summary, maxText), printable("summary", p.Summary)); err != nil {
 		return Pipeline{}, err
 	}
-	if len(p.Steps) > maxSteps {
-		return Pipeline{}, fmt.Errorf("%w: %d steps, the limit is %d", ErrInvalid, len(p.Steps), maxSteps)
+	if len(p.Steps) > maxRawSteps {
+		return Pipeline{}, fmt.Errorf("%w: %d steps, the limit is %d", ErrInvalid, len(p.Steps), maxRawSteps)
 	}
 	for i := range p.Steps {
 		st := &p.Steps[i]
@@ -142,7 +146,7 @@ func ParsePipeline(data []byte) (Pipeline, error) {
 		st.Why = strings.TrimSpace(st.Why)
 		st.Confidence = strings.ToLower(strings.TrimSpace(st.Confidence))
 		if len(st.Commands) > maxCmds {
-			return Pipeline{}, fmt.Errorf("%w: step %d has %d commands, the limit is %d", ErrInvalid, i, len(st.Commands), maxCmds)
+			st.Commands = st.Commands[:maxCmds]
 		}
 		for j := range st.Commands {
 			st.Commands[j] = strings.TrimSpace(st.Commands[j])
@@ -157,11 +161,14 @@ func ParsePipeline(data []byte) (Pipeline, error) {
 		); err != nil {
 			return Pipeline{}, fmt.Errorf("step %d: %w", i, err)
 		}
-		if st.Priority < 1 || st.Priority > maxSteps {
+		if st.Priority < 1 || st.Priority > maxRawSteps {
 			return Pipeline{}, fmt.Errorf("%w: step %d has priority %d", ErrInvalid, i, st.Priority)
 		}
 	}
 	sortSteps(p.Steps)
+	if len(p.Steps) > maxSteps {
+		p.Steps = p.Steps[:maxSteps]
+	}
 	// The same for a plan: steps and a plea for more recon together are taken as the steps.
 	if len(p.Steps) > 0 {
 		p.NeedsRecon = false

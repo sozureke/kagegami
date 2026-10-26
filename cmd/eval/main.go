@@ -16,6 +16,7 @@ import (
 	"github.com/sozureke/kagegami/internal/eval"
 	"github.com/sozureke/kagegami/pkg/llm"
 	"github.com/sozureke/kagegami/pkg/llm/ollama"
+	"github.com/sozureke/kagegami/pkg/llm/openrouter"
 )
 
 func main() {
@@ -26,7 +27,7 @@ func main() {
 }
 
 func run() error {
-	model := flag.String("model", "llama3.1:8b", "the Ollama model to test")
+	model := flag.String("model", "llama3.1:8b", "the model to test: an Ollama model, or openrouter/<vendor>/<model> (the key is read from OPENROUTER_API_KEY)")
 	baseURL := flag.String("base-url", ollama.DefaultBaseURL, "the address of Ollama; it must be on this machine")
 	repeats := flag.Int("repeats", 3, "runs of each case of tier 2")
 	variants := flag.String("variants", "both", "the prompts to run: both, example or no-example")
@@ -38,16 +39,7 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	// The fixtures hold no real data, but the rule is the same as for the program: a model that is
-	// not on this machine is used only when someone has decided so, and an eval is not that decision.
-	local, err := llm.IsLocal(ctx, *baseURL, nil)
-	if err != nil {
-		return fmt.Errorf("-base-url: %w", err)
-	}
-	if !local {
-		return fmt.Errorf("-base-url %s is not on this machine; the eval runs against a local model only", *baseURL)
-	}
-	p, err := ollama.New(ollama.Config{Model: *model, BaseURL: *baseURL})
+	p, err := provider(ctx, *model, *baseURL)
 	if err != nil {
 		return err
 	}
@@ -101,4 +93,26 @@ func write(rep eval.Report, out string) error {
 	}
 	fmt.Fprintln(os.Stderr, "report written to", out)
 	return nil
+}
+
+// provider makes the model to test. A model that runs on this machine needs nothing else. One at
+// OpenRouter is used only because it is asked for by name: the fixtures are made up and hold no real
+// data, which is what makes it fine to send them there, and a real case never goes this way.
+func provider(ctx context.Context, model, baseURL string) (llm.Provider, error) {
+	if spec, err := llm.ParseSpec(model); err == nil && spec.Provider == "openrouter" {
+		p, err := openrouter.New(openrouter.Config{Model: spec.Model, APIKey: os.Getenv(openrouter.KeyEnv)})
+		if err != nil {
+			return nil, err
+		}
+		fmt.Fprintln(os.Stderr, "eval: the made-up fixtures are sent to OpenRouter, model", spec.Model)
+		return p, nil
+	}
+	local, err := llm.IsLocal(ctx, baseURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("-base-url: %w", err)
+	}
+	if !local {
+		return nil, fmt.Errorf("-base-url %s is not on this machine; to use a model elsewhere, name it openrouter/<vendor>/<model>", baseURL)
+	}
+	return ollama.New(ollama.Config{Model: model, BaseURL: baseURL})
 }

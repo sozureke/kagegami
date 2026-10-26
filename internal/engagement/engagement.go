@@ -30,6 +30,11 @@ type Changes struct {
 	AddScope []string
 }
 
+// Any reports whether the changes would change anything.
+func (c Changes) Any() bool {
+	return c.Target != nil || c.Goal != nil || c.ROE != nil || c.Phase != nil || c.Scope != nil || len(c.AddScope) > 0
+}
+
 // Result is the engagement after the update.
 type Result struct {
 	Engagement store.Engagement

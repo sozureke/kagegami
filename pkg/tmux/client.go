@@ -90,6 +90,10 @@ type SplitOptions struct {
 	Percent    int    // size of the new pane in percent of the target; 0 means tmux's default
 	Command    string // run by tmux through a shell; empty starts the default shell
 	KeepFocus  bool   // do not switch to the new pane (-d)
+	Dir        string // the working directory of the new pane (-c); empty means tmux's default
+	// Env are NAME=value pairs for the environment of the new pane (-e). Unlike the text of Command
+	// they do not show up in the command line of any process, which is where a key must not be.
+	Env []string
 }
 
 // SplitWindow splits a pane and returns the id of the new one. The new pane is remembered
@@ -112,6 +116,18 @@ func (c *Client) SplitWindow(ctx context.Context, o SplitOptions) (PaneID, error
 	if o.Percent > 0 {
 		args = append(args, "-l", strconv.Itoa(o.Percent)+"%")
 	}
+	if o.Dir != "" {
+		if !strings.HasPrefix(o.Dir, "/") || strings.ContainsAny(o.Dir, "\n\x00") {
+			return "", fmt.Errorf("%w: directory %q (expected an absolute path on one line)", ErrInvalid, o.Dir)
+		}
+		args = append(args, "-c", o.Dir)
+	}
+	for _, e := range o.Env {
+		if err := checkEnv(e); err != nil {
+			return "", err
+		}
+		args = append(args, "-e", e)
+	}
 	if o.Command != "" {
 		args = append(args, o.Command)
 	}
@@ -128,6 +144,17 @@ func (c *Client) SplitWindow(ctx context.Context, o SplitOptions) (PaneID, error
 	c.owned[id] = struct{}{}
 	c.mu.Unlock()
 	return id, nil
+}
+
+var envNameRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// checkEnv refuses an entry that is not NAME=value, or whose value could not be one line of text.
+func checkEnv(e string) error {
+	name, value, ok := strings.Cut(e, "=")
+	if !ok || !envNameRE.MatchString(name) || strings.ContainsAny(value, "\x00\n\r") {
+		return fmt.Errorf("%w: %q is not NAME=value for the environment of a pane", ErrInvalid, name)
+	}
+	return nil
 }
 
 // KillPane closes a pane that this program created with SplitWindow. It refuses any other
@@ -197,6 +224,17 @@ func (c *Client) PaneExists(ctx context.Context, pane PaneID) (bool, error) {
 		return false, nil
 	}
 	return err == nil, err
+}
+
+// PaneFocused reports whether the pane is the active pane of the active window, which is where the
+// keys go while the terminal is in front. It asks tmux once, so it is cheap enough to poll. A pane
+// that is not there is not focused.
+func (c *Client) PaneFocused(ctx context.Context, pane PaneID) (bool, error) {
+	if _, err := ParsePaneID(string(pane)); err != nil {
+		return false, err
+	}
+	out, err := c.r.Run(ctx, "display-message", "-p", "-t", string(pane), "#{&&:#{pane_active},#{window_active}}")
+	return strings.TrimSpace(out) == "1", err
 }
 
 // PaneSize returns the width and height of the pane in cells.

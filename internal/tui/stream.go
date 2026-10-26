@@ -69,17 +69,30 @@ func renderEvent(e Event, width int) []string {
 		return hang(gutter("", " ", styleDim, styleLo), emphasize(e.Text, e.Words), lipgloss.NewStyle())
 	case KindNote:
 		return hang(gutter(GlyphReport, " ", styleUser, styleUser), e.Text, styleUser)
+	case KindUser:
+		return hang(gutter("", "❯", styleUser, stylePrompt), e.Text, styleUser)
 	case KindFinding:
 		return hang(gutter("!", " ", styleFind, styleFind), e.Text, styleFind)
 	case KindSystem:
-		return hang(gutter(clock, e.Glyph, styleDim, styleLo), e.Text, styleLo)
+		return hang(gutter(clock, e.Glyph, styleDim, styleMid), e.Text, styleText)
+	case KindCard:
+		if e.Card == nil {
+			return nil
+		}
+		return renderCard(*e.Card, width)
 	case KindAssistant:
 		return renderTurn(e, clock, text, indent, gutter)
 	case KindBlock:
 		out := make([]string, 0, len(e.Lines)+1)
 		out = append(out, "") // a block is set apart from the stream above it
 		for _, l := range e.Lines {
-			out = append(out, indent+ansi.Truncate(l, text, "…"))
+			// a line that is too long goes on the next line, indented under its start
+			for i, part := range strings.Split(ansi.Wrap(l, text, ""), "\n") {
+				if i > 0 {
+					part = "  " + part
+				}
+				out = append(out, indent+ansi.Truncate(part, text, ""))
+			}
 		}
 		return out
 	}
@@ -92,23 +105,26 @@ func renderTurn(e Event, clock string, text int, indent string, gutter func(slot
 		return nil
 	}
 	if t.State == turnThinking {
-		return []string{gutter(clock, "›", styleDim, styleMid) + styleMid.Render(string(spinFrames[t.Spin])+" thinking")}
+		return []string{gutter(clock, "›", styleDim, styleMid) + styleHi.Render(workFrame(t.Spin)) + styleText.Render(" thinking")}
 	}
 	rationale, command := t.Shown()
 	var out []string
 	for i, l := range strings.Split(lipgloss.NewStyle().Width(text).Render(rationale), "\n") {
 		l = strings.TrimRight(l, " ")
 		if i == 0 {
-			out = append(out, gutter(clock, "›", styleDim, styleMid)+styleMid.Render(l))
+			out = append(out, gutter(clock, "›", styleDim, styleMid)+styleText.Render(l))
 		} else {
-			out = append(out, indent+styleMid.Render(l))
+			out = append(out, indent+styleText.Render(l))
 		}
 	}
-	if command != "" || t.State == turnCommand {
+	if len(t.Command) > 0 && (command != "" || t.State == turnCommand) {
 		box := styleBlock.Width(text).Render(command)
 		for _, l := range strings.Split(box, "\n") {
 			out = append(out, indent+l)
 		}
+	}
+	if t.State == turnDone && t.Meta != "" {
+		out = append(out, indent+styleDim.Render(t.Meta))
 	}
 	return out
 }

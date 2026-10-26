@@ -10,7 +10,8 @@ const (
 	typeTick = 17 * time.Millisecond
 )
 
-var spinFrames = []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
+// spinCycle is how many ticks pass before the marker of a waiting answer is back at its first frame.
+const spinCycle = workEvery * 6
 
 type turnState int
 
@@ -27,7 +28,9 @@ type Turn struct {
 	Spin      int
 	Rationale []rune
 	Command   []rune
-	shown     int
+	// Meta is a dim line under a finished answer, such as its risk.
+	Meta  string
+	shown int
 }
 
 // NewTurn starts a turn that is waiting for the model.
@@ -43,7 +46,7 @@ func (t *Turn) Answer(rationale, command string) {
 func (t *Turn) Busy() bool { return t.State != turnDone }
 
 // Spun moves the spinner on one frame.
-func (t *Turn) Spun() { t.Spin = (t.Spin + 1) % len(spinFrames) }
+func (t *Turn) Spun() { t.Spin = (t.Spin + 1) % spinCycle }
 
 // Typed adds a character, moving on from the rationale to the command and then to the end.
 func (t *Turn) Typed() {
