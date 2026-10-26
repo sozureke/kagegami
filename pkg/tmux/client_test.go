@@ -175,6 +175,7 @@ func TestSplitWindowArguments(t *testing.T) {
 		{"keep focus", SplitOptions{Target: "%1", KeepFocus: true}, []string{"split-window", "-P", "-F", "#{pane_id}", "-t", "%1", "-d"}},
 		{"percent", SplitOptions{Target: "%1", Percent: 40}, []string{"split-window", "-P", "-F", "#{pane_id}", "-t", "%1", "-l", "40%"}},
 		{"command", SplitOptions{Target: "%1", Command: "kagegami panel"}, []string{"split-window", "-P", "-F", "#{pane_id}", "-t", "%1", "kagegami panel"}},
+		{"directory", SplitOptions{Target: "%1", Dir: "/work/my box"}, []string{"split-window", "-P", "-F", "#{pane_id}", "-t", "%1", "-c", "/work/my box"}},
 		{"environment", SplitOptions{Target: "%1", Env: []string{"A=1", "KEY=a b=c"}}, []string{"split-window", "-P", "-F", "#{pane_id}", "-t", "%1", "-e", "A=1", "-e", "KEY=a b=c"}},
 		{
 			"everything",
@@ -568,5 +569,17 @@ func TestPaneFocusedAsksOnceAndReadsTheAnswer(t *testing.T) {
 		if _, err := c2.PaneFocused(bg, "%4"); err == nil {
 			t.Error("a failure of tmux must be returned")
 		}
+	}
+}
+
+func TestSplitWindowRefusesADirectoryThatIsNotAnAbsolutePathOnOneLine(t *testing.T) {
+	c, r := newFake(inside("%0"), func([]string) (string, error) { return "%9", nil })
+	for _, bad := range []string{"relative/dir", "-c", "/a\nb", "/a\x00b"} {
+		if _, err := c.SplitWindow(bg, SplitOptions{Target: "%1", Dir: bad}); !errors.Is(err, ErrInvalid) {
+			t.Errorf("dir %q: err = %v, want ErrInvalid", bad, err)
+		}
+	}
+	if r.count() != 0 {
+		t.Errorf("tmux ran %d times for a bad directory", r.count())
 	}
 }

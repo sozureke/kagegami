@@ -112,10 +112,10 @@ func TestWatchFlagsSetTheCaseBeforeWatching(t *testing.T) {
 }
 
 func TestPanelArgs(t *testing.T) {
-	if got := strings.Join(panelArgs("%2", "box", false), " "); got != "panel --pane %2 --case box" {
+	if got := strings.Join(panelArgs("%2", "box", false, ""), " "); got != "panel --pane %2 --case box" {
 		t.Errorf("args = %q", got)
 	}
-	if got := panelArgs("%2", "box", true); got[len(got)-1] != "--no-anim" {
+	if got := panelArgs("%2", "box", true, ""); got[len(got)-1] != "--no-anim" {
 		t.Errorf("args = %v", got)
 	}
 }
@@ -326,5 +326,31 @@ func TestAKeyReachesThePanelThroughItsEnvironmentAndNeverThroughItsCommand(t *te
 	_ = launchWatch(context.Background(), launchConfig{client: f, exe: "kg", getenv: func(string) string { return "" }, stderr: &bytes.Buffer{}})
 	if len(f.splits[0].Env) != 0 {
 		t.Errorf("with no key nothing is passed: %v", f.splits[0].Env)
+	}
+}
+
+func TestWatchOfAGivenPaneNeedsNoTmuxAroundIt(t *testing.T) {
+	caseWithHost(t, t.TempDir(), "htb")
+	f := &fakeTmux{} // not inside tmux: the launcher has just made the session
+	err := launchWatch(context.Background(), launchConfig{client: f, exe: "kg", pane: "%1", notice: "first run: created x", stderr: &bytes.Buffer{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.splits) != 1 || f.splits[0].Target != "%1" {
+		t.Fatalf("splits = %+v", f.splits)
+	}
+	if !strings.Contains(f.splits[0].Command, "'--notice' 'first run: created x'") {
+		t.Errorf("command = %q: the notice must reach the panel", f.splits[0].Command)
+	}
+}
+
+func TestThePanelOpensInTheDirectoryOfTheShell(t *testing.T) {
+	caseWithHost(t, t.TempDir(), "htb")
+	f := &fakeTmux{inside: true, pane: "%3"}
+	if err := launchWatch(context.Background(), launchConfig{client: f, exe: "kg", dir: "/work/box", stderr: &bytes.Buffer{}}); err != nil {
+		t.Fatal(err)
+	}
+	if f.splits[0].Dir != "/work/box" {
+		t.Errorf("dir = %q", f.splits[0].Dir)
 	}
 }

@@ -89,6 +89,13 @@ type launchConfig struct {
 	changes  engagement.Changes
 	noAnim   bool
 	percent  int
+	// pane is the pane to watch when the launcher is not itself in one (it has just made a tmux
+	// session); empty means the pane the command was run in.
+	pane tmux.PaneID
+	// dir is where the panel opens, the directory of the shell it sits beside; empty means this process's.
+	dir string
+	// notice is a line the panel starts with, such as what was created for a first run.
+	notice string
 	// getenv reads the environment of the shell the command was run in; nil means this process's.
 	getenv func(string) string
 	stderr interface{ Write([]byte) (int, error) }
@@ -97,12 +104,15 @@ type launchConfig struct {
 // launchWatch opens the panel in a new tmux pane beside the pane the command was run in. The new
 // pane runs `kagegami panel`, which does the watching; this process only sets things up and exits.
 func launchWatch(ctx context.Context, c launchConfig) error {
-	if !c.client.InsideTmux() {
-		return errors.New("kagegami watch runs inside tmux: start tmux, then run it in the pane whose commands you want watched")
-	}
-	pane, err := c.client.CurrentPane()
-	if err != nil {
-		return err
+	pane := c.pane
+	if pane == "" {
+		if !c.client.InsideTmux() {
+			return errors.New("kagegami watch runs inside tmux: start tmux, then run it in the pane whose commands you want watched (or just run kagegami, which starts tmux for you)")
+		}
+		var err error
+		if pane, err = c.client.CurrentPane(); err != nil {
+			return err
+		}
 	}
 
 	if busy, err := c.client.Piped(ctx, pane); err != nil {
@@ -128,12 +138,17 @@ func launchWatch(ctx context.Context, c launchConfig) error {
 	if getenv == nil {
 		getenv = os.Getenv
 	}
-	command := panelCommand(c.exe, panelArgs(pane, name, c.noAnim), forwardedEnv(getenv, forwardedVars))
+	dir := c.dir
+	if dir == "" {
+		dir, _ = os.Getwd() // the panel opens in the directory of the shell, whose case it is
+	}
+	command := panelCommand(c.exe, panelArgs(pane, name, c.noAnim, c.notice), forwardedEnv(getenv, forwardedVars))
 	if _, err := c.client.SplitWindow(ctx, tmux.SplitOptions{
 		Target:     pane,
 		Horizontal: true,
 		Percent:    c.percent,
 		Command:    command,
+		Dir:        dir,
 		KeepFocus:  true, // the person stays in their shell; the panel draws itself beside it
 		Env:        forwardedEnv(getenv, secretVars),
 	}); err != nil {
@@ -185,10 +200,13 @@ func panelCommand(exe string, args, env []string) string {
 }
 
 // panelArgs are the arguments of the panel process that runs in the new pane.
-func panelArgs(pane tmux.PaneID, caseName string, noAnim bool) []string {
+func panelArgs(pane tmux.PaneID, caseName string, noAnim bool, notice string) []string {
 	args := []string{"panel", "--pane", string(pane), "--case", caseName}
 	if noAnim {
 		args = append(args, "--no-anim")
+	}
+	if notice != "" {
+		args = append(args, "--notice", notice)
 	}
 	return args
 }

@@ -40,7 +40,7 @@ import (
 // newPanelCmd is the panel that `kagegami watch` opens in the new pane. It is not meant to be
 // typed: it does the watching and draws the stream.
 func newPanelCmd(info BuildInfo) *cobra.Command {
-	var paneFlag, caseName string
+	var paneFlag, caseName, noticeFlag string
 	var noAnim bool
 	cmd := &cobra.Command{
 		Use:    "panel",
@@ -56,16 +56,17 @@ func newPanelCmd(info BuildInfo) *cobra.Command {
 			if err != nil {
 				return &usageError{err: err}
 			}
-			return runPanel(cmd, info, pane, caseName, noAnim)
+			return runPanel(cmd, info, pane, caseName, noAnim, noticeFlag)
 		},
 	}
 	cmd.Flags().StringVar(&paneFlag, "pane", "", "the tmux pane to watch, such as %3")
 	cmd.Flags().StringVar(&caseName, "case", "", "the case to record into")
 	cmd.Flags().BoolVar(&noAnim, "no-anim", false, "skip the opening animation")
+	cmd.Flags().StringVar(&noticeFlag, "notice", "", "a line to start the stream with, such as what was set up")
 	return cmd
 }
 
-func runPanel(cmd *cobra.Command, info BuildInfo, pane tmux.PaneID, caseName string, noAnim bool) error {
+func runPanel(cmd *cobra.Command, info BuildInfo, pane tmux.PaneID, caseName string, noAnim bool, setupNotice string) error {
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	defer stop()
 
@@ -114,10 +115,10 @@ func runPanel(cmd *cobra.Command, info BuildInfo, pane tmux.PaneID, caseName str
 	}
 
 	filter := terminal.NewFilter(cfg.Capture.Ignore)
-	backend := &panelBackend{st: st, rawDir: rawDir, set: set, filter: filter}
-	notice := ""
+	backend := &panelBackend{st: st, name: name, rawDir: rawDir, set: set, filter: filter}
+	notice := setupNotice
 	if set.Remote {
-		notice = remoteNotice
+		notice = strings.TrimPrefix(notice+"\n"+remoteNotice, "\n")
 	}
 	model := tui.New(tui.Config{
 		Version: "kagegami " + info.Version, Live: true, Backend: backend, Context: ctx,
@@ -245,6 +246,7 @@ func currentScope(ctx context.Context, st *store.Store) agent.ScopeCheck {
 // answers of tier 2.
 type panelBackend struct {
 	st     *store.Store
+	name   string // the case, for what /target and the first message set
 	rawDir string
 	set    *models.Set
 	filter *terminal.Filter

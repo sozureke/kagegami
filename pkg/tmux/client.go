@@ -90,6 +90,7 @@ type SplitOptions struct {
 	Percent    int    // size of the new pane in percent of the target; 0 means tmux's default
 	Command    string // run by tmux through a shell; empty starts the default shell
 	KeepFocus  bool   // do not switch to the new pane (-d)
+	Dir        string // the working directory of the new pane (-c); empty means tmux's default
 	// Env are NAME=value pairs for the environment of the new pane (-e). Unlike the text of Command
 	// they do not show up in the command line of any process, which is where a key must not be.
 	Env []string
@@ -114,6 +115,12 @@ func (c *Client) SplitWindow(ctx context.Context, o SplitOptions) (PaneID, error
 	}
 	if o.Percent > 0 {
 		args = append(args, "-l", strconv.Itoa(o.Percent)+"%")
+	}
+	if o.Dir != "" {
+		if !strings.HasPrefix(o.Dir, "/") || strings.ContainsAny(o.Dir, "\n\x00") {
+			return "", fmt.Errorf("%w: directory %q (expected an absolute path on one line)", ErrInvalid, o.Dir)
+		}
+		args = append(args, "-c", o.Dir)
 	}
 	for _, e := range o.Env {
 		if err := checkEnv(e); err != nil {
