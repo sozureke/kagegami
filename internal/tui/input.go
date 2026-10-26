@@ -80,6 +80,15 @@ func (in *input) deleteWord() {
 
 func (in *input) empty() bool { return len(in.runes) == 0 }
 
+// text is what has been typed.
+func (in *input) text() string { return string(in.runes) }
+
+// set replaces what has been typed, with the cursor at the end.
+func (in *input) set(s string) {
+	in.runes = []rune(s)
+	in.cursor = len(in.runes)
+}
+
 // view renders the input line to a width, with a prompt and the cursor shown when the panel has the
 // keyboard. The text scrolls so that the cursor is always in view.
 func (in *input) view(width int, focused bool) string {

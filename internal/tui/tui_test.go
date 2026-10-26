@@ -152,7 +152,7 @@ func TestCtrlCAndExitQuitGentlyAndTypingDoesNot(t *testing.T) {
 	if cmd := ctrlC(m); cmd == nil || !m.quitting {
 		t.Fatal("ctrl+c must start the gentle exit")
 	}
-	if !strings.Contains(lastEvent(m).Text, "resume it with:  kagegami watch --case htb") {
+	if !strings.Contains(lastEvent(m).Text, "resume it with:  kagegami --case htb") {
 		t.Errorf("the farewell must name how to resume: %q", lastEvent(m).Text)
 	}
 	if _, next := m.Update(quitMsg{}); !isQuit(next) {
@@ -341,6 +341,11 @@ type fakeBackend struct {
 	nexts     int
 	autos     []bool
 	asked     []string
+	// onboard is what Onboard answers; the zero value says the case has a scope already.
+	onboard    Setup
+	onboarded  []string
+	configure  Setup
+	configured []Settings
 }
 
 func (f *fakeBackend) Map(context.Context) (string, error) { f.maps++; return f.mapText, f.err }
@@ -353,6 +358,16 @@ func (f *fakeBackend) Next(_ context.Context, auto bool) (Suggestion, error) {
 	f.nexts++
 	f.autos = append(f.autos, auto)
 	return f.next, f.err
+}
+
+func (f *fakeBackend) Onboard(_ context.Context, msg string) (Setup, error) {
+	f.onboarded = append(f.onboarded, msg)
+	return f.onboard, f.err
+}
+
+func (f *fakeBackend) Configure(_ context.Context, s Settings) (Setup, error) {
+	f.configured = append(f.configured, s)
+	return f.configure, f.err
 }
 
 func (f *fakeBackend) Ask(_ context.Context, q string) (Suggestion, error) {
@@ -876,13 +891,13 @@ func TestTypingAMessageAsksTheAssistantAndShowsItInTheStream(t *testing.T) {
 	b := &fakeBackend{next: Suggestion{Rationale: "port 8000 is a Python http server", Command: "curl -s http://10.0.0.5:8000/", Risk: "low", Confidence: "medium"}}
 	m := liveModel(t, b)
 	cmd := submit(m, "what is on port 8000?")
-	if len(m.events) != 2 || m.events[0].Kind != KindUser || m.events[0].Text != "what is on port 8000?" {
+	if len(m.events) != 1 || m.events[0].Kind != KindUser || m.events[0].Text != "what is on port 8000?" {
 		t.Fatalf("the question is shown as the tester's own: %+v", m.events)
 	}
+	run(m, cmd)
 	if lastEvent(m).Turn == nil {
 		t.Fatal("the assistant starts to answer")
 	}
-	run(m, cmd)
 	for m.typing {
 		m.typeTick()
 	}
@@ -953,5 +968,167 @@ func TestTheInputShowsACursorOnlyWhenFocused(t *testing.T) {
 func typeTextInput(in *input, text string) {
 	for _, r := range text {
 		in.handle(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+}
+
+func TestASlashOpensTheListOfCommandsAndNarrowsAsYouType(t *testing.T) {
+	m := newModel(t, Config{Backend: &fakeBackend{}})
+	if strings.Contains(ansi.Strip(m.View().Content), "/pipeline") {
+		t.Fatal("the list is closed until a slash is typed")
+	}
+	typeText(m, "/")
+	screen := ansi.Strip(m.View().Content)
+	for _, c := range commandList {
+		if !strings.Contains(screen, c.usage) {
+			t.Errorf("after a slash the list lacks %q:\n%s", c.usage, screen)
+		}
+	}
+	typeText(m, "p")
+	screen = ansi.Strip(m.View().Content)
+	if !strings.Contains(screen, "/pipeline") || strings.Contains(screen, "/clear") {
+		t.Errorf("after /p only the commands that start with p remain:\n%s", screen)
+	}
+	typeText(m, "x") // nothing starts with px
+	if strings.Contains(ansi.Strip(m.View().Content), "/pipeline") {
+		t.Error("no command matches, so the list closes")
+	}
+	typeText(m, " ")
+	if len(matchCommands("/ask what")) != 0 {
+		t.Error("once the arguments are typed nothing is offered")
+	}
+}
+
+func TestTheListIsDrivenByUpDownTabAndEnter(t *testing.T) {
+	m := newModel(t, Config{Backend: &fakeBackend{}})
+	typeText(m, "/")
+	pressKey(m, tea.KeyPressMsg{Code: tea.KeyDown}) // the second of the list, /target
+	pressKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
+	if got := m.in.text(); got != "/target " {
+		t.Errorf("tab completes the chosen command: input = %q", got)
+	}
+
+	m = newModel(t, Config{Backend: &fakeBackend{}})
+	typeText(m, "/")
+	pressKey(m, tea.KeyPressMsg{Code: tea.KeyUp}) // wraps round to the last, /exit
+	pressKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
+	if got := m.in.text(); got != "/exit" {
+		t.Errorf("up from the first goes to the last: input = %q", got)
+	}
+
+	// enter on /ask, which needs a question, completes it and waits
+	m = newModel(t, Config{Backend: &fakeBackend{}})
+	typeText(m, "/")
+	pressKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	if got := m.in.text(); got != "/ask " || m.quitting {
+		t.Errorf("enter on a command that needs an argument completes it: input = %q", got)
+	}
+
+	// enter on the start of a name runs the chosen command
+	m = newModel(t, Config{Backend: &fakeBackend{}})
+	typeText(m, "/he")
+	pressKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	if !m.has(blockHelp) || !m.in.empty() {
+		t.Errorf("enter on /he runs /help: help open = %v, input = %q", m.has(blockHelp), m.in.text())
+	}
+}
+
+func TestTheListFitsASmallPane(t *testing.T) {
+	m := newModel(t, Config{})
+	m.Update(tea.WindowSizeMsg{Width: 50, Height: 8})
+	typeText(m, "/")
+	lines := strings.Split(ansi.Strip(m.View().Content), "\n")
+	if len(lines) != 8 {
+		t.Fatalf("%d lines for a pane of 8", len(lines))
+	}
+	if !strings.Contains(lines[len(lines)-2], "❯ /") {
+		t.Errorf("the input stays on the last row: %q", lines[len(lines)-2])
+	}
+}
+
+func TestTheFirstMessageOfACaseWithoutAScopeIsTheTaskAndStartsTheWork(t *testing.T) {
+	b := &fakeBackend{onboard: Setup{Handled: true, Started: true, Summary: "task taken. target 10.10.10.5 · scope 10.10.10.5"}, next: Suggestion{Rationale: "start with a port scan", Command: "nmap -sV 10.10.10.5"}}
+	m := newModel(t, Config{Backend: b})
+	cmdRun(m, "get the user flag on 10.10.10.5")
+	for m.typing || m.spinning {
+		m.typeTick()
+		m.spinning = false
+	}
+	if len(b.asked) != 0 {
+		t.Errorf("the task is not a question: Ask was called with %v", b.asked)
+	}
+	if b.nexts != 1 || len(b.autos) != 1 || b.autos[0] {
+		t.Errorf("once the target is set the first step is asked for: nexts = %d, autos = %v", b.nexts, b.autos)
+	}
+	var all []string
+	for _, e := range m.events {
+		all = append(all, e.Text)
+	}
+	if got := strings.Join(all, "\n"); !strings.Contains(got, "get the user flag") || !strings.Contains(got, "task taken. target 10.10.10.5") {
+		t.Errorf("the stream shows the message and what was set:\n%s", got)
+	}
+}
+
+func TestAMessageBeforeAnyTargetIsAnsweredWithoutTheModel(t *testing.T) {
+	b := &fakeBackend{onboard: Setup{Handled: true, Summary: "give me the target"}}
+	m := newModel(t, Config{Backend: b})
+	cmdRun(m, "hello")
+	if len(b.asked) != 0 || b.nexts != 0 {
+		t.Error("with no target nothing is asked of the model")
+	}
+	if got := lastEvent(m).Text; got != "give me the target" {
+		t.Errorf("last = %q", got)
+	}
+}
+
+func TestACaseWithAScopeTakesMessagesAsQuestions(t *testing.T) {
+	b := &fakeBackend{next: Suggestion{Rationale: "port 8000 is a dev server"}}
+	m := newModel(t, Config{Backend: b})
+	cmdRun(m, "what is on 8000?")
+	if len(b.onboarded) != 1 || len(b.asked) != 1 || b.asked[0] != "what is on 8000?" {
+		t.Errorf("onboarded = %v, asked = %v", b.onboarded, b.asked)
+	}
+}
+
+func TestTargetGoalAndScopeCommandsChangeTheCase(t *testing.T) {
+	b := &fakeBackend{configure: Setup{Summary: "target 10.10.10.5"}}
+	m := newModel(t, Config{Backend: b})
+	cmdRun(m, "/target 10.10.10.5")
+	cmdRun(m, "/goal user and root flag")
+	cmdRun(m, "/scope 10.10.10.0/24 10.10.20.5")
+	cmdRun(m, "/scope add 192.168.1.50")
+	cmdRun(m, "/scope")
+	if len(b.configured) != 5 {
+		t.Fatalf("%d changes: %+v", len(b.configured), b.configured)
+	}
+	if s := b.configured[0]; s.Target == nil || *s.Target != "10.10.10.5" {
+		t.Errorf("/target = %+v", s)
+	}
+	if s := b.configured[1]; s.Goal == nil || *s.Goal != "user and root flag" {
+		t.Errorf("/goal = %+v", s)
+	}
+	if s := b.configured[2]; s.Scope == nil || (*s.Scope)[0] != "10.10.10.0/24 10.10.20.5" {
+		t.Errorf("/scope list = %+v", s)
+	}
+	if s := b.configured[3]; len(s.AddScope) != 1 || s.AddScope[0] != "192.168.1.50" || s.Scope != nil {
+		t.Errorf("/scope add = %+v", s)
+	}
+	if s := b.configured[4]; s.Scope != nil || s.AddScope != nil || s.Target != nil || s.Goal != nil {
+		t.Errorf("/scope alone only shows: %+v", s)
+	}
+	for _, line := range []string{"/target", "/goal"} {
+		before := len(b.configured)
+		cmdRun(m, line)
+		if len(b.configured) != before {
+			t.Errorf("%s without an argument must not change anything", line)
+		}
+	}
+}
+
+func TestACommandThatGivesTheCaseItsFirstScopeAsksForTheFirstStep(t *testing.T) {
+	b := &fakeBackend{configure: Setup{Summary: "target 10.10.10.5 · scope 10.10.10.5", Started: true}}
+	m := newModel(t, Config{Backend: b})
+	cmdRun(m, "/target 10.10.10.5")
+	if b.nexts != 1 {
+		t.Errorf("nexts = %d", b.nexts)
 	}
 }

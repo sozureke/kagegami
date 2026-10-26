@@ -28,7 +28,7 @@ type Config struct {
 	Copy func(text string) error
 	// Context ends the calls to the backend when the panel is closed; nil means they are not ended.
 	Context context.Context
-	// Notice is a line the stream starts with, such as a warning that matters for the whole session.
+	// Notice is what the stream starts with, a line each, such as a warning that matters for the whole session.
 	Notice string
 	// SessionName is what the session is called, shown on exit so it can be resumed; empty hides it.
 	SessionName string
@@ -82,6 +82,17 @@ type (
 	typeMsg struct{}
 	// quitMsg ends the program after the farewell has been shown.
 	quitMsg struct{}
+	// onboardMsg is what the backend made of a message before it was taken as a question.
+	onboardMsg struct {
+		question string
+		res      Setup
+		err      error
+	}
+	// setupMsg is the end of a change of the engagement made by a command.
+	setupMsg struct {
+		res Setup
+		err error
+	}
 )
 
 // Model is the panel: the stream, and the blocks its keys open.
@@ -107,6 +118,8 @@ type Model struct {
 	lastAutoErr string
 	// in is the line the tester types.
 	in input
+	// sel is the command chosen in the list that opens when the line starts with a slash.
+	sel int
 	// quitting says the farewell is shown and the program is about to end.
 	quitting bool
 }
@@ -120,8 +133,10 @@ func New(cfg Config) *Model {
 		cfg.Context = context.Background()
 	}
 	m := &Model{cfg: cfg, width: 80, height: 24, loading: map[string]bool{}}
-	if cfg.Notice != "" {
-		m.system(cfg.Notice)
+	for _, line := range strings.Split(cfg.Notice, "\n") { // one entry per line
+		if line != "" {
+			m.system(line)
+		}
 	}
 	if cfg.Greeting != "" {
 		m.system(cfg.Greeting)
@@ -181,6 +196,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.typeTick()
 	case quitMsg:
 		return m, tea.Quit
+	case onboardMsg:
+		return m, m.gotOnboard(msg)
+	case setupMsg:
+		return m, m.gotSetup(msg)
 	}
 	return m, nil
 }
@@ -194,11 +213,57 @@ func (m *Model) onKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if k.String() == "ctrl+c" {
 		return m, m.quit()
 	}
+	if cmds := matchCommands(m.in.text()); len(cmds) > 0 {
+		if model, cmd, done := m.onPaletteKey(k, cmds); done {
+			return model, cmd
+		}
+	}
 	line, submitted, _ := m.in.handle(k)
+	m.sel = 0 // the list is about a new line
 	if !submitted {
 		return m, nil
 	}
 	return m.submit(line)
+}
+
+// onPaletteKey handles the keys of the list of commands that is open: up and down choose, tab
+// completes, and enter on the start of a name runs the chosen command (or, if it needs an argument,
+// completes it and waits). done says the key was used; otherwise the input gets it as usual.
+func (m *Model) onPaletteKey(k tea.KeyPressMsg, cmds []commandInfo) (tea.Model, tea.Cmd, bool) {
+	m.sel = min(max(m.sel, 0), len(cmds)-1)
+	switch k.String() {
+	case "up":
+		m.sel = (m.sel + len(cmds) - 1) % len(cmds)
+		return m, nil, true
+	case "down":
+		m.sel = (m.sel + 1) % len(cmds)
+		return m, nil, true
+	case "tab":
+		m.complete(cmds[m.sel])
+		return m, nil, true
+	case "enter":
+		c := cmds[m.sel]
+		if m.in.text() == "/"+c.name { // already complete: run it as typed
+			return m, nil, false
+		}
+		if c.args {
+			m.complete(c)
+			return m, nil, true
+		}
+		m.in.set("/" + c.name)
+		return m, nil, false
+	}
+	return m, nil, false
+}
+
+// complete puts a command in the input: with a space after it when it needs an argument.
+func (m *Model) complete(c commandInfo) {
+	line := "/" + c.name
+	if c.args {
+		line += " "
+	}
+	m.in.set(line)
+	m.sel = 0
 }
 
 // submit acts on a line the tester entered: a slash command, or, otherwise, a message to the assistant.
@@ -236,10 +301,79 @@ func (m *Model) runCommand(c command) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, m.ask(c.args)
+	case cmdTarget:
+		if c.args == "" {
+			m.system("/target needs an address, a network or a range, for example: /target 10.10.10.5")
+			return m, nil
+		}
+		return m, m.configure(Settings{Target: &c.args})
+	case cmdGoal:
+		if c.args == "" {
+			m.system("/goal needs a few words, for example: /goal user and root flag")
+			return m, nil
+		}
+		return m, m.configure(Settings{Goal: &c.args})
+	case cmdScope:
+		return m, m.configure(scopeSettings(c.args))
 	default:
 		m.system("no command /" + c.name + "; /help lists them")
 	}
 	return m, nil
+}
+
+// scopeSettings reads the arguments of /scope: nothing shows the scope, "add" and a list adds to it,
+// and a list replaces it.
+func scopeSettings(args string) Settings {
+	if args == "" {
+		return Settings{}
+	}
+	if rest, ok := strings.CutPrefix(args, "add "); ok {
+		return Settings{AddScope: []string{rest}}
+	}
+	list := []string{args}
+	return Settings{Scope: &list}
+}
+
+// configure changes the engagement off the loop of the panel.
+func (m *Model) configure(s Settings) tea.Cmd {
+	if m.noBackend() {
+		return nil
+	}
+	ctx := m.cfg.Context
+	return func() tea.Msg {
+		res, err := m.cfg.Backend.Configure(ctx, s)
+		return setupMsg{res: res, err: err}
+	}
+}
+
+// gotSetup shows what a command changed. A case that has just got its scope gets its first step.
+func (m *Model) gotSetup(msg setupMsg) tea.Cmd {
+	if msg.err != nil {
+		m.system(friendly(msg.err))
+		return nil
+	}
+	m.system(msg.res.Summary)
+	if msg.res.Started {
+		return m.askNext(false)
+	}
+	return nil
+}
+
+// gotOnboard goes on with a message the backend has looked at: it was the task (said, and the first
+// step follows), or it is a question for the assistant.
+func (m *Model) gotOnboard(msg onboardMsg) tea.Cmd {
+	switch {
+	case msg.err != nil:
+		m.system(friendly(msg.err))
+		return nil
+	case msg.res.Handled:
+		m.system(msg.res.Summary)
+		if msg.res.Started {
+			return m.askNext(false)
+		}
+		return nil
+	}
+	return m.askQuestion(msg.question)
 }
 
 // quit shows the farewell and ends the program a moment later, so the exit is not abrupt.
@@ -256,7 +390,7 @@ func (m *Model) farewell() string {
 	if m.cfg.SessionName == "" {
 		return "bye."
 	}
-	return "session " + m.cfg.SessionName + " saved. resume it with:  kagegami watch --case " + m.cfg.SessionName
+	return "session " + m.cfg.SessionName + " saved. resume it with:  kagegami --case " + m.cfg.SessionName
 }
 
 // ask puts the tester's message in the stream and asks the assistant about it.
@@ -266,6 +400,15 @@ func (m *Model) ask(question string) tea.Cmd {
 		m.system("nothing is connected to the panel yet")
 		return nil
 	}
+	ctx := m.cfg.Context
+	return func() tea.Msg { // while the case has no scope the message is the task, not a question
+		res, err := m.cfg.Backend.Onboard(ctx, question)
+		return onboardMsg{question: question, res: res, err: err}
+	}
+}
+
+// askQuestion asks the assistant a question of the tester, with a spinner while the model works.
+func (m *Model) askQuestion(question string) tea.Cmd {
 	t := NewTurn()
 	m.events = append(m.events, Event{Kind: KindAssistant, Time: m.cfg.Now(), Turn: t})
 	ctx := m.cfg.Context
@@ -546,12 +689,25 @@ func (m *Model) screen() string {
 	if h < 1 {
 		return frame(nil, m.width, m.height, m.focused, "kagegami")
 	}
-	// the last inner row is the input, with a blank row above it to set it apart
-	streamRows := max(h-2, 1)
+	// the last inner row is the input, with a blank row above it to set it apart; the list of
+	// commands, when it is open, takes rows from the stream just above them
+	var palette []string
+	if cmds := matchCommands(m.in.text()); len(cmds) > 0 && h >= 5 {
+		sel := min(max(m.sel, 0), len(cmds)-1)
+		shown := cmds
+		if room := h - 4; len(shown) > room { // keep the chosen one in view
+			start := min(max(sel-room+1, 0), len(shown)-room)
+			shown = shown[start : start+room]
+			sel -= start
+		}
+		palette = paletteRows(shown, sel, w)
+	}
+	streamRows := max(h-2-len(palette), 1)
 	rows := m.stream(w, streamRows)
 	for len(rows) < streamRows {
 		rows = append(rows, "")
 	}
+	rows = append(rows, palette...)
 	if h >= 2 {
 		rows = append(rows, "")
 	}

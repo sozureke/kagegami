@@ -17,6 +17,33 @@ type Backend interface {
 	Next(ctx context.Context, auto bool) (Suggestion, error)
 	// Ask answers a free question from the tester, over the map, the journal and the recent commands.
 	Ask(ctx context.Context, question string) (Suggestion, error)
+	// Onboard is called first with every message the tester types. While the case has no scope it
+	// takes the message as the task: it sets the target and the scope from the addresses in it and
+	// says so (Handled). Once there is a scope it does nothing (not Handled) and the message is a
+	// question.
+	Onboard(ctx context.Context, message string) (Setup, error)
+	// Configure changes what the case is about (/target, /goal, /scope). With nothing to change it
+	// only reports what is set now.
+	Configure(ctx context.Context, s Settings) (Setup, error)
+}
+
+// Settings is a change of what the case is about. A nil field is left as it is.
+type Settings struct {
+	Target *string
+	Goal   *string
+	// Scope replaces the scope; AddScope adds to it.
+	Scope    *[]string
+	AddScope []string
+}
+
+// Setup is what became of a change of the engagement: a line for the stream, and whether the case
+// has just got its first scope, which is when the assistant should say what to do first.
+type Setup struct {
+	Summary string
+	// Handled says the message was the task and has been dealt with, so it is not a question.
+	Handled bool
+	// Started says the case had no scope and has one now.
+	Started bool
 }
 
 // Suggestion is the answer to Next.
