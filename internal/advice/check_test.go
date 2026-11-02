@@ -99,6 +99,30 @@ func TestCheckCommandRefuses(t *testing.T) {
 	}
 }
 
+func TestCheckCommandRefusesAnAlreadyRunCommand(t *testing.T) {
+	c := ctx(t)
+	c.Ran = map[string]bool{"nmap -sV 10.0.0.5": true}
+
+	err := c.CheckCommand("nmap   -sV  10.0.0.5") // different spacing, same command
+	var r *Refusal
+	if !errors.As(err, &r) || r.Kind != AlreadyRun {
+		t.Errorf("err = %v, want %s", err, AlreadyRun)
+	}
+	if err := c.CheckCommand("nmap -sV -p- 10.0.0.5"); err != nil {
+		t.Errorf("a different command on the same host was refused: %v", err)
+	}
+}
+
+func TestANilRanNeverRefuses(t *testing.T) {
+	c := ctx(t)
+	if c.Ran != nil {
+		t.Fatal("ctx() must not set Ran")
+	}
+	if err := c.CheckCommand("nmap -sV 10.0.0.5"); err != nil {
+		t.Errorf("a nil Ran must never be the reason a command is refused: %v", err)
+	}
+}
+
 func TestNothingIsOfferedWithoutAScope(t *testing.T) {
 	for _, c := range []Context{{}, {Scope: scope.Scope{}}} {
 		if err := c.CheckCommand("nmap 10.0.0.5"); !errors.Is(err, ErrNoScope) {
@@ -124,10 +148,18 @@ func TestCheckSuggestion(t *testing.T) {
 	if err := c.CheckSuggestion(Suggestion{Command: "nmap 8.8.8.8"}); err == nil {
 		t.Error("an out-of-scope suggestion was accepted")
 	}
+
+	c.Ran = map[string]bool{"nmap 10.0.0.5": true}
+	err := c.CheckSuggestion(Suggestion{Command: "nmap 10.0.0.5"})
+	var r *Refusal
+	if !errors.As(err, &r) || r.Kind != AlreadyRun {
+		t.Errorf("an already-run suggestion was accepted: %v", err)
+	}
 }
 
 func TestCheckPipeline(t *testing.T) {
 	c := ctx(t)
+	c.Ran = map[string]bool{"ssh-audit 10.0.0.5": true}
 	p := Pipeline{Summary: "s", Steps: []Step{
 		{Priority: 1, Service: "10.0.0.5:8000/tcp http", Vector: "web", Why: "w", Commands: []string{"gobuster dir -u http://10.0.0.5:8000 -w w.txt", "gobuster dir -u http://8.8.8.8", "nikto -h 10.0.0.5; id"}, Confidence: "high"},
 		{Priority: 2, Service: "10.0.0.5:9999/tcp", Vector: "invented", Why: "w", Commands: []string{"nmap 10.0.0.5"}, Confidence: "high"},
@@ -147,8 +179,8 @@ func TestCheckPipeline(t *testing.T) {
 	if got.Steps[0].Vector != "web" || len(got.Steps[0].Commands) != 1 || got.Steps[0].Confidence != "high" {
 		t.Errorf("step 1 = %+v: only the good command stays", got.Steps[0])
 	}
-	if got.Steps[1].Vector != "ssh by name" || got.Steps[1].Priority != 2 {
-		t.Errorf("step 2 = %+v: a service given by a host name on the map is fine, and priorities are renumbered", got.Steps[1])
+	if got.Steps[1].Vector != "ssh by name" || got.Steps[1].Confidence != "low" || got.Steps[1].Commands == nil || len(got.Steps[1].Commands) != 0 || got.Steps[1].Priority != 2 {
+		t.Errorf("step 2 = %+v: its only command was already run, so it stays as low confidence advice", got.Steps[1])
 	}
 	if got.Steps[2].Vector != "only bad commands" || got.Steps[2].Confidence != "low" || got.Steps[2].Commands == nil || len(got.Steps[2].Commands) != 0 || got.Steps[2].Priority != 3 {
 		t.Errorf("step 3 = %+v: a step that lost all its commands stays as low confidence advice", got.Steps[2])
@@ -157,7 +189,7 @@ func TestCheckPipeline(t *testing.T) {
 	for _, d := range dropped {
 		kinds[d.Kind]++
 	}
-	if kinds[OutOfScope] != 3 || kinds[Unsafe] != 1 || kinds[Ungrounded] != 3 {
+	if kinds[OutOfScope] != 3 || kinds[Unsafe] != 1 || kinds[Ungrounded] != 3 || kinds[AlreadyRun] != 1 {
 		t.Errorf("dropped = %v", dropped)
 	}
 	if len(p.Steps) != 7 || len(p.Steps[0].Commands) != 3 {

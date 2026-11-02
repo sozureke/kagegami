@@ -744,3 +744,34 @@ func TestListRecentBlobsGivesTheLatestFinishedOnesOldestFirst(t *testing.T) {
 		t.Error("a count of 0 must be refused")
 	}
 }
+
+func TestListCommands(t *testing.T) {
+	_, r, _ := newRepo(t)
+	for _, cmd := range []string{"nmap a", "ffuf b", "nmap a"} {
+		b, err := r.CreateBlob(bg, cmd)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := r.FinishBlob(bg, b.ID, 0, 0, strings.Repeat("a", 64)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := r.CreateBlob(bg, "still running"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := r.ListCommands(bg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || !slices.Contains(got, "nmap a") || !slices.Contains(got, "ffuf b") {
+		t.Errorf("commands = %v, want exactly {nmap a, ffuf b} (distinct, and not the one still running)", got)
+	}
+}
+
+func TestListCommandsEmpty(t *testing.T) {
+	_, r, _ := newRepo(t)
+	if got, err := r.ListCommands(bg); err != nil || len(got) != 0 {
+		t.Errorf("ListCommands = %v, %v; want none", got, err)
+	}
+}

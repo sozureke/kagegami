@@ -126,6 +126,34 @@ func TestNextRetriesWhenTheCommandIsRefused(t *testing.T) {
 	}
 }
 
+func TestNextRetriesWhenTheCommandWasAlreadyRun(t *testing.T) {
+	st := caseWithOneHost(t)
+	alreadyRun := "gobuster dir -u http://10.0.0.5:8000 -w /usr/share/wordlists/dirb/common.txt"
+	blob, err := st.Repo().CreateBlob(bg, alreadyRun)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.Repo().FinishBlob(bg, blob.ID, 0, 0, strings.Repeat("a", 64)); err != nil {
+		t.Fatal(err)
+	}
+
+	differentCommand := strings.Replace(goodSuggestionJSON, "gobuster dir -u http://10.0.0.5:8000 -w /usr/share/wordlists/dirb/common.txt", "ffuf -u http://10.0.0.5:8000/FUZZ -w w.txt", 1)
+	f := llmtest.NewFake(llmtest.Text(goodSuggestionJSON), llmtest.Text(differentCommand))
+	res, err := newTier2(t, f, st).Next(bg, "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(res.Suggestion.Command, "gobuster") {
+		t.Errorf("the already-run suggestion was accepted: %+v", res.Suggestion)
+	}
+	if len(f.Requests()) != 2 {
+		t.Fatalf("%d requests", len(f.Requests()))
+	}
+	if last := f.Requests()[1].Messages[len(f.Requests()[1].Messages)-1]; !strings.Contains(last.Content, "already run") {
+		t.Errorf("the retry does not say why: %q", last.Content)
+	}
+}
+
 func TestNextGivesUpAfterTheAttemptsRunOut(t *testing.T) {
 	st := caseWithOneHost(t)
 	f := llmtest.NewFake(llmtest.Text("nonsense"), llmtest.Text("still nonsense"), llmtest.Text(goodSuggestionJSON))

@@ -28,6 +28,8 @@ const (
 	UnknownHost Kind = "host not on the map"
 	// Ungrounded: the step is about a service that is not on the map.
 	Ungrounded Kind = "not on the map"
+	// AlreadyRun: the exact command has already been run in this case.
+	AlreadyRun Kind = "already run"
 )
 
 // Refusal is the reason a command was not accepted.
@@ -53,6 +55,16 @@ type Context struct {
 	Hostnames map[string]string
 	// Services are the services on the map, written <address>:<port>/<proto>.
 	Services map[string]bool
+	// Ran holds every command that has already been run in this case, normalized by NormalizeCommand.
+	// A nil map means none is known (no command is ever treated as a repeat).
+	Ran map[string]bool
+}
+
+// NormalizeCommand collapses whitespace so that two commands that differ only in spacing compare
+// equal. It does nothing cleverer than that: a command with different flags or a different target
+// is a different command, not a repeat. A caller that builds Ran must key it with this.
+func NormalizeCommand(cmd string) string {
+	return strings.Join(strings.Fields(cmd), " ")
 }
 
 // CheckCommand says whether a command may be offered as advice: it is one command (a pipe and a
@@ -81,6 +93,9 @@ func (c Context) CheckCommand(cmd string) error {
 		case !c.Scope.Contains(ip):
 			return &Refusal{Kind: OutOfScope, Detail: h + " (" + ip + ")"}
 		}
+	}
+	if c.Ran[NormalizeCommand(cmd)] {
+		return &Refusal{Kind: AlreadyRun, Detail: cmd}
 	}
 	return nil
 }

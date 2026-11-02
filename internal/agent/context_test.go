@@ -104,6 +104,34 @@ func TestLoadAdviceContextWithAMap(t *testing.T) {
 	}
 }
 
+func TestLoadAdviceContextPopulatesRan(t *testing.T) {
+	st := openCaseStore(t)
+	if _, err := engagement.Update(bg, st, "c", engagement.Changes{Target: sp("10.0.0.5")}); err != nil {
+		t.Fatal(err)
+	}
+	finished, err := st.Repo().CreateBlob(bg, "nmap   -sV  10.0.0.5") // extra spacing, on purpose
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.Repo().FinishBlob(bg, finished.ID, 0, 0, strings.Repeat("a", 64)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.Repo().CreateBlob(bg, "still running, never finished"); err != nil {
+		t.Fatal(err)
+	}
+
+	ac, err := LoadAdviceContext(bg, st, ContextOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ac.Check.Ran["nmap -sV 10.0.0.5"] {
+		t.Errorf("Ran = %v, want the finished command, normalized", ac.Check.Ran)
+	}
+	if ac.Check.Ran["still running, never finished"] {
+		t.Error("an unfinished command must not count as already run")
+	}
+}
+
 func intp(n int) *int { return &n }
 
 func TestMapTextOpenHostsFirstAndClosedPortsHidden(t *testing.T) {
