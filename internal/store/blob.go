@@ -84,6 +84,26 @@ func (r *Repo) ListRecentBlobs(ctx context.Context, n int) ([]OutputBlob, error)
 	return out, rows.Err()
 }
 
+// ListCommands returns every distinct command that has finished, in no particular order. It is
+// meant for checking whether a command has already been run, not for showing anyone a history:
+// kagegami map and the <recent> block tier 2 sees each have their own, bounded view.
+func (r *Repo) ListCommands(ctx context.Context) ([]string, error) {
+	rows, err := r.q.QueryContext(ctx, `SELECT DISTINCT cmd FROM output_blob WHERE finished_at IS NOT NULL`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var cmd string
+		if err := rows.Scan(&cmd); err != nil {
+			return nil, err
+		}
+		out = append(out, cmd)
+	}
+	return out, rows.Err()
+}
+
 func scanBlob(s scanner) (OutputBlob, error) {
 	var b OutputBlob
 	var exit, finished sql.NullInt64

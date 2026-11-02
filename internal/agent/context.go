@@ -97,8 +97,16 @@ func LoadAdviceContext(ctx context.Context, st *store.Store, opts ContextOptions
 	if err != nil {
 		return AdviceContext{}, err
 	}
+	ran, err := st.Repo().ListCommands(ctx)
+	if err != nil {
+		return AdviceContext{}, err
+	}
 	sc := engagement.Scope(e)
 	cites := newCitations()
+	ranSet := make(map[string]bool, len(ran))
+	for _, cmd := range ran {
+		ranSet[advice.NormalizeCommand(cmd)] = true
+	}
 
 	out := AdviceContext{
 		Case:    caseBlock(e, sc.String()),
@@ -106,7 +114,7 @@ func LoadAdviceContext(ctx context.Context, st *store.Store, opts ContextOptions
 		Journal: journalText(entries, opts.JournalEntries, cites),
 		Recent:  recentText(ctx, st, opts, cites),
 		Empty:   len(view.Hosts) == 0,
-		Check:   advice.Context{Scope: sc, Hosts: map[string]bool{}, Hostnames: map[string]string{}, Services: map[string]bool{}},
+		Check:   advice.Context{Scope: sc, Hosts: map[string]bool{}, Hostnames: map[string]string{}, Services: map[string]bool{}, Ran: ranSet},
 		Citable: cites.ids,
 	}
 	for _, h := range view.Hosts {
